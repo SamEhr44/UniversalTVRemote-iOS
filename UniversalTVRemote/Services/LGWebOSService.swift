@@ -302,6 +302,28 @@ final class LGWebOSService: NSObject, ObservableObject {
         try await sendRequest("ssap://com.webos.service.tvpower/power/turnOff")
     }
 
+    // Channel
+    func channelUp() async throws { try await sendRequest("ssap://tv/channelUp") }
+    func channelDown() async throws { try await sendRequest("ssap://tv/channelDown") }
+
+    // Media transport
+    func play() async throws { try await sendRequest("ssap://media.controls/play") }
+    func pause() async throws { try await sendRequest("ssap://media.controls/pause") }
+    func stop() async throws { try await sendRequest("ssap://media.controls/stop") }
+    func rewind() async throws { try await sendRequest("ssap://media.controls/rewind") }
+    func fastForward() async throws { try await sendRequest("ssap://media.controls/fastForward") }
+
+    /// Launches an installed app by its webOS app id (e.g. "netflix").
+    func launchApp(_ appId: String) async throws {
+        try await sendRequest("ssap://system.launcher/launch", payload: ["id": appId])
+    }
+
+    // Extra navigation keys delivered via the pointer input socket.
+    func menu() async throws { try await sendButton("MENU") }
+    func exit() async throws { try await sendButton("EXIT") }
+    func guide() async throws { try await sendButton("GUIDE") }
+    func info() async throws { try await sendButton("INFO") }
+
     /// Queries the TV's network status and returns the MAC address of the active
     /// interface (preferring the connected one), for Wake-on-LAN. Returns nil if
     /// the TV doesn't report a usable MAC.
@@ -400,6 +422,12 @@ final class LGWebOSService: NSObject, ObservableObject {
         }
         pairingState = .idle
     }
+
+    #if DEBUG
+    /// Test/preview helper: forces the connected state so the remote UI can be
+    /// previewed without a live TV. Not used in release builds.
+    func previewMarkConnected() { connectionState = .connected }
+    #endif
 
     // MARK: - Internals
 
