@@ -9,6 +9,12 @@ manual IP typing as the primary path, no vendor cloud.
 > [`TVRemoteProject`](https://github.com/SamEhr44/TVRemoteProject). It is built
 > to run in the **iOS Simulator** in Xcode (and on a physical iPhone).
 
+<p align="center">
+  <img src="docs/scan-screen.png" alt="Scan screen running in the iOS Simulator" width="300">
+</p>
+
+> ✅ Verified building and launching in the iOS Simulator (iPhone 17, Xcode 26).
+
 ---
 
 ## Overview
