@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Required so iOS shows the local-network permission prompt; without it,
+	     SSDP discovery and TV control on the LAN are silently blocked.
+	     (Not enforced on the iOS Simulator, which uses the Mac's network.) -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>This app needs local network access to find and control TVs on your Wi-Fi network.</string>
+	<!-- Bonjour service types the app may browse. SSDP/UPnP is the primary
+	     discovery path, but declaring these keeps iOS from blocking any mDNS
+	     lookups and documents intent for App Review. -->
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_lg-smart-device._tcp</string>
+		<string>_airplay._tcp</string>
+		<string>_googlecast._tcp</string>
+	</array>
+	<!-- App Transport Security: TVs on the LAN use plaintext ws:// and
+	     self-signed wss:// endpoints, so allow arbitrary local-network loads. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+</dict>
+</plist>
