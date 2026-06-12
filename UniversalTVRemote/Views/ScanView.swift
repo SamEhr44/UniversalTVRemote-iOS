@@ -19,7 +19,8 @@ final class ScanViewModel: ObservableObject {
     let lg = LGWebOSService()
     let store = PairedTVStore()
 
-    private let discovery = SSDPDiscoveryService()
+    private let ssdp = SSDPDiscoveryService()
+    private let bonjour = BonjourDiscoveryService()
     private let wol = WakeOnLanService()
     private var scanTask: Task<Void, Never>?
 
@@ -33,17 +34,31 @@ final class ScanViewModel: ObservableObject {
         errorMessage = nil
         discovered.removeAll()
 
+        // Run SSDP (works in the simulator) and Bonjour (works on a physical
+        // phone without the multicast entitlement) concurrently; both feed the
+        // same deduped list.
+        let ssdpStream = ssdp.discover()
+        let bonjourStream = bonjour.discover()
+
         scanTask = Task { [weak self] in
             guard let self else { return }
-            for await device in discovery.discover() {
-                if Task.isCancelled { break }
-                // Replace any earlier entry for the same IP (e.g. when a nicer
-                // friendly name arrives after the initial detection).
-                discovered.removeAll { $0.ip == device.ip }
-                discovered.append(device)
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    for await device in ssdpStream { await self.add(device) }
+                }
+                group.addTask {
+                    for await device in bonjourStream { await self.add(device) }
+                }
             }
             isScanning = false
         }
+    }
+
+    /// Adds or replaces a discovered device, deduped by IP. Replacing lets a
+    /// nicer friendly name (from either source) supersede an earlier entry.
+    private func add(_ device: TVDevice) {
+        discovered.removeAll { $0.ip == device.ip }
+        discovered.append(device)
     }
 
     /// Connects to a manually-entered IP address (bypasses discovery, which iOS
