@@ -46,6 +46,14 @@ final class ScanViewModel: ObservableObject {
         }
     }
 
+    /// Connects to a manually-entered IP address (bypasses discovery, which iOS
+    /// blocks on physical devices without the multicast entitlement).
+    func openManualIP(_ ip: String) async {
+        let trimmed = ip.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        await open(TVDevice(ip: trimmed, name: "LG TV (\(trimmed))"))
+    }
+
     /// Merges a stored client-key/MAC into a tapped device, then routes to pairing.
     func open(_ device: TVDevice) async {
         let stored = await store.getPairedTV(device.ip)
@@ -82,12 +90,15 @@ final class ScanViewModel: ObservableObject {
 struct ScanView: View {
     @StateObject private var model = ScanViewModel()
     @StateObject private var toastCenter = ToastCenter()
+    @State private var showManualEntry = false
+    @State private var manualIP = ""
 
     var body: some View {
         NavigationStack(path: $model.path) {
             List {
                 Section {
                     scanButton
+                    manualEntryButton
                     if model.isScanning {
                         VStack(alignment: .leading, spacing: 8) {
                             ProgressView()
@@ -133,6 +144,20 @@ struct ScanView: View {
             .navigationTitle("LG webOS Remote")
             .refreshable { model.startScan() }
             .toast(toastCenter)
+            .alert("Connect to a TV by IP", isPresented: $showManualEntry) {
+                TextField("192.168.1.131", text: $manualIP)
+                    .keyboardType(.numbersAndPunctuation)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                Button("Connect") {
+                    let ip = manualIP
+                    Task { await model.openManualIP(ip) }
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Enter the TV's IP address (shown in your router, the TV's "
+                    + "network settings, or another remote app).")
+            }
             .navigationDestination(for: RemoteRoute.self) { route in
                 switch route {
                 case .pairing(let device):
@@ -169,6 +194,19 @@ struct ScanView: View {
         }
         .buttonStyle(.borderedProminent)
         .disabled(model.isScanning)
+    }
+
+    private var manualEntryButton: some View {
+        Button {
+            showManualEntry = true
+        } label: {
+            HStack {
+                Image(systemName: "keyboard")
+                Text("Add TV by IP address")
+            }
+            .frame(maxWidth: .infinity, minHeight: 32)
+        }
+        .buttonStyle(.bordered)
     }
 }
 
