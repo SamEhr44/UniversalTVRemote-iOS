@@ -10,9 +10,11 @@ manual IP typing as the primary path, no vendor cloud.
 > to run in the **iOS Simulator** in Xcode (and on a physical iPhone).
 
 <p align="center">
-  <img src="docs/scan-screen.png" alt="Scan screen running in the iOS Simulator" width="280">
-  &nbsp;&nbsp;
-  <img src="docs/remote-screen.png" alt="Remote control screen" width="280">
+  <img src="docs/scan-screen.png" alt="Scan screen" width="240">
+  &nbsp;
+  <img src="docs/pairing-screen.png" alt="Pairing screen" width="240">
+  &nbsp;
+  <img src="docs/remote-screen.png" alt="Remote control screen" width="240">
 </p>
 
 > ✅ Verified building and launching in the iOS Simulator (iPhone 17, Xcode 26).

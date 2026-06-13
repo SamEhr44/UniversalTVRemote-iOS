@@ -37,16 +37,25 @@ private struct ToastOverlay: ViewModifier {
         content.overlay(alignment: .bottom) {
             if let toast = center.current {
                 Text(toast.text)
-                    .font(.subheadline)
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, 18)
                     .padding(.vertical, 12)
                     .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(toast.isError ? Color.red.opacity(0.92) : Color.black.opacity(0.85))
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(.ultraThinMaterial)
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(toast.isError ? Color.red.opacity(0.55) : Color.black.opacity(0.35))
+                        }
                     )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.4), radius: 10, y: 5)
                     .padding(.horizontal, 24)
-                    .padding(.bottom, 24)
+                    .padding(.bottom, 28)
                     .frame(maxWidth: .infinity)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .id(toast.token)

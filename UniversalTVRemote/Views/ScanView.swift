@@ -110,54 +110,80 @@ struct ScanView: View {
 
     var body: some View {
         NavigationStack(path: $model.path) {
-            List {
-                Section {
-                    scanButton
-                    manualEntryButton
-                    if model.isScanning {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ProgressView()
-                            Text("Searching for LG TVs on your Wi-Fi…")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    if let error = model.errorMessage {
-                        ErrorBanner(message: error)
-                    }
-                }
-                .listRowSeparator(.hidden)
+            ZStack {
+                AppTheme.background.ignoresSafeArea()
+                ParticleField(count: 30)
 
-                if !model.paired.isEmpty {
-                    Section("Previously paired") {
-                        ForEach(model.paired) { tv in
-                            DeviceRow(device: tv, isPaired: true, onWake: {
-                                let result = model.wake(tv)
-                                toastCenter.show(result.message, isError: result.isError)
-                            })
-                            .contentShape(Rectangle())
-                            .onTapGesture { Task { await model.open(tv) } }
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 16) {
+                        Button {
+                            Haptics.tap()
+                            model.startScan()
+                        } label: {
+                            HStack(spacing: 10) {
+                                if model.isScanning {
+                                    ProgressView().controlSize(.small).tint(.white)
+                                } else {
+                                    Image(systemName: "wifi")
+                                }
+                                Text(model.isScanning ? "Scanning…" : "Scan for LG TVs")
+                            }
                         }
-                    }
-                }
+                        .buttonStyle(AccentButtonStyle(disabled: model.isScanning))
+                        .disabled(model.isScanning)
 
-                Section("Discovered") {
-                    if model.discovered.isEmpty {
-                        EmptyStateView(isScanning: model.isScanning)
-                            .listRowSeparator(.hidden)
-                    } else {
-                        let pairedIps = Set(model.paired.map(\.ip))
-                        ForEach(model.discovered) { device in
-                            DeviceRow(device: device, isPaired: pairedIps.contains(device.ip), onWake: nil)
-                                .contentShape(Rectangle())
-                                .onTapGesture { Task { await model.open(device) } }
+                        Button {
+                            Haptics.tap()
+                            showManualEntry = true
+                        } label: {
+                            Label("Add TV by IP address", systemImage: "keyboard")
+                        }
+                        .buttonStyle(GlassButtonStyle())
+
+                        if model.isScanning {
+                            HStack(spacing: 10) {
+                                ProgressView().tint(AppTheme.accent)
+                                Text("Searching for LG TVs on your Wi-Fi…")
+                                    .font(.footnote)
+                                    .foregroundStyle(.white.opacity(0.6))
+                                Spacer()
+                            }
+                        }
+
+                        if let error = model.errorMessage {
+                            ErrorBanner(message: error)
+                        }
+
+                        if !model.paired.isEmpty {
+                            SectionHeader("Previously paired")
+                            ForEach(model.paired) { tv in
+                                DeviceCard(device: tv, isPaired: true,
+                                           onTap: { Task { await model.open(tv) } },
+                                           onWake: {
+                                               let r = model.wake(tv)
+                                               toastCenter.show(r.message, isError: r.isError)
+                                           })
+                            }
+                        }
+
+                        SectionHeader("Discovered")
+                        if model.discovered.isEmpty {
+                            EmptyStateView(isScanning: model.isScanning)
+                        } else {
+                            let pairedIps = Set(model.paired.map(\.ip))
+                            ForEach(model.discovered) { device in
+                                DeviceCard(device: device, isPaired: pairedIps.contains(device.ip),
+                                           onTap: { Task { await model.open(device) } },
+                                           onWake: nil)
+                            }
                         }
                     }
+                    .padding(20)
                 }
+                .refreshable { model.startScan() }
             }
-            .listStyle(.insetGrouped)
             .navigationTitle("LG webOS Remote")
-            .refreshable { model.startScan() }
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toast(toastCenter)
             .alert("Connect to a TV by IP", isPresented: $showManualEntry) {
                 TextField("192.168.1.131", text: $manualIP)
@@ -182,100 +208,92 @@ struct ScanView: View {
                 }
             }
         }
+        .preferredColorScheme(.dark)
         .task { await model.loadPaired() }
         .onChange(of: model.path) {
-            // Refresh paired list whenever we return to the root (a new pairing
-            // may have been saved).
             if model.path.isEmpty {
                 Task { await model.loadPaired() }
             }
         }
     }
-
-    private var scanButton: some View {
-        Button {
-            model.startScan()
-        } label: {
-            HStack {
-                if model.isScanning {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: "wifi")
-                }
-                Text(model.isScanning ? "Scanning…" : "Scan for LG TVs")
-                    .fontWeight(.semibold)
-            }
-            .frame(maxWidth: .infinity, minHeight: 36)
-        }
-        .buttonStyle(.borderedProminent)
-        .disabled(model.isScanning)
-    }
-
-    private var manualEntryButton: some View {
-        Button {
-            showManualEntry = true
-        } label: {
-            HStack {
-                Image(systemName: "keyboard")
-                Text("Add TV by IP address")
-            }
-            .frame(maxWidth: .infinity, minHeight: 32)
-        }
-        .buttonStyle(.bordered)
-    }
 }
 
 // MARK: - Subviews
 
-private struct DeviceRow: View {
+private struct SectionHeader: View {
+    let title: String
+    init(_ title: String) { self.title = title }
+    var body: some View {
+        HStack {
+            Text(title.uppercased())
+                .font(.caption.weight(.bold))
+                .tracking(1.4)
+                .foregroundStyle(AppTheme.accent)
+            Spacer()
+        }
+        .padding(.top, 6)
+    }
+}
+
+private struct DeviceCard: View {
     let device: TVDevice
     let isPaired: Bool
+    let onTap: () -> Void
     /// When provided, shows a Wake-on-LAN power button (for paired TVs).
     let onWake: (() -> Void)?
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             Image(systemName: "tv")
                 .font(.title3)
-                .frame(width: 40, height: 40)
-                .background(Color(.tertiarySystemFill))
-                .clipShape(Circle())
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(AppTheme.accent.opacity(0.25), in: Circle())
+                .overlay(Circle().stroke(AppTheme.edgeHighlight, lineWidth: 1))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(device.name).font(.body)
-                Text(device.ip).font(.subheadline).foregroundStyle(.secondary)
+                Text(device.name).font(.body.weight(.semibold)).foregroundStyle(.white)
+                Text(device.ip).font(.subheadline).foregroundStyle(.white.opacity(0.55))
                 if let location = device.location {
                     Text(location)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.white.opacity(0.4))
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
             }
 
-            Spacer()
+            Spacer(minLength: 4)
 
             if isPaired {
                 if let onWake {
-                    Button(action: onWake) {
-                        Image(systemName: "power")
+                    Button {
+                        Haptics.tap()
+                        onWake()
+                    } label: {
+                        Image(systemName: "power").font(.body.weight(.semibold))
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(PressableStyle())
+                    .foregroundStyle(AppTheme.accent)
+                    .frame(width: 36, height: 36)
                     .accessibilityLabel("Power on (Wake-on-LAN)")
                 }
-                Text("Paired")
-                    .font(.caption.weight(.semibold))
+                Text("PAIRED")
+                    .font(.caption2.weight(.heavy))
+                    .foregroundStyle(.white.opacity(0.8))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color(.tertiarySystemFill))
-                    .clipShape(Capsule())
+                    .background(Color.white.opacity(0.10), in: Capsule())
             } else {
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.4))
             }
         }
-        .padding(.vertical, 4)
+        .padding(14)
+        .glassCard(corner: 18)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
     }
 }
 
@@ -286,19 +304,19 @@ private struct EmptyStateView: View {
         VStack(spacing: 12) {
             Image(systemName: "tv.slash")
                 .font(.system(size: 40))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.4))
             Text(isScanning ? "Looking for TVs…" : "No LG TVs found yet")
                 .font(.headline)
+                .foregroundStyle(.white)
             Text("Make sure your phone and LG TV are on the same Wi-Fi network and "
                 + "mobile control is enabled on the TV.")
                 .font(.footnote)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.5))
         }
         .frame(maxWidth: .infinity)
-        .padding(20)
-        .background(Color(.secondarySystemBackground).opacity(0.4))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(24)
+        .glassCard(corner: 18)
     }
 }
 
@@ -312,13 +330,8 @@ private struct ErrorBanner: View {
             Spacer(minLength: 0)
         }
         .font(.subheadline)
-        .padding(12)
-        .background(Color.red.opacity(0.15))
-        .foregroundStyle(Color.red)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .foregroundStyle(.white)
+        .padding(14)
+        .background(AppTheme.danger.opacity(0.85), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
-}
-
-#Preview {
-    ScanView()
 }

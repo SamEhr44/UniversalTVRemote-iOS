@@ -1,9 +1,9 @@
 import SwiftUI
-import UIKit
 
 /// The working remote — a premium dark control surface. Sends SSAP commands
-/// over the shared `LGWebOSService`. High-frequency controls (D-pad) give
-/// haptic feedback instead of a toast; errors always surface as a toast.
+/// over the shared `LGWebOSService`. High-frequency controls (D-pad, volume,
+/// channel) give haptic feedback and hold-to-repeat instead of a toast; errors
+/// always surface as a toast.
 struct RemoteView: View {
     @ObservedObject var lg: LGWebOSService
     let store: PairedTVStore
@@ -29,7 +29,8 @@ struct RemoteView: View {
 
     var body: some View {
         ZStack {
-            RemoteTheme.background.ignoresSafeArea()
+            AppTheme.background.ignoresSafeArea()
+            ParticleField(count: 42)
 
             VStack(spacing: 12) {
                 if lg.connectionState != .connected {
@@ -77,8 +78,9 @@ struct RemoteView: View {
             RemoteKey(systemImage: "list.bullet", label: "Menu") {
                 run({ try await lg.menu() }, success: "Menu")
             }
-            RemoteKey(systemImage: "power", label: "Power", tint: RemoteTheme.danger, glow: RemoteTheme.danger) {
-                run({ try await lg.powerOff() }, success: "Power off sent")
+            RemoteKey(systemImage: "power", label: "Power", tint: AppTheme.danger, glow: AppTheme.danger) {
+                Haptics.strong()
+                run({ try await lg.powerOff() }, success: "Power off sent", haptic: false)
             }
         }
     }
@@ -97,11 +99,14 @@ struct RemoteView: View {
 
             DPadWheel(
                 size: 208,
-                onUp: { run({ try await lg.up() }, success: nil) },
-                onDown: { run({ try await lg.down() }, success: nil) },
-                onLeft: { run({ try await lg.left() }, success: nil) },
-                onRight: { run({ try await lg.right() }, success: nil) },
-                onOk: { run({ try await lg.ok() }, success: nil) }
+                onUp: { run({ try await lg.up() }, success: nil, haptic: false) },
+                onDown: { run({ try await lg.down() }, success: nil, haptic: false) },
+                onLeft: { run({ try await lg.left() }, success: nil, haptic: false) },
+                onRight: { run({ try await lg.right() }, success: nil, haptic: false) },
+                onOk: {
+                    Haptics.strong()
+                    run({ try await lg.ok() }, success: nil, haptic: false)
+                }
             )
 
             VStack(spacing: 12) {
@@ -120,15 +125,15 @@ struct RemoteView: View {
         HStack(spacing: 12) {
             StepperPill(
                 label: "VOL",
-                onUp: { run({ try await lg.volumeUp() }, success: nil) },
-                onDown: { run({ try await lg.volumeDown() }, success: nil) }
+                onUp: { run({ try await lg.volumeUp() }, success: nil, haptic: false) },
+                onDown: { run({ try await lg.volumeDown() }, success: nil, haptic: false) }
             )
 
             RemoteKey(
                 systemImage: muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
                 label: muted ? "Unmute" : "Mute",
-                tint: muted ? RemoteTheme.accent : .white,
-                glow: muted ? RemoteTheme.accent : nil
+                tint: muted ? AppTheme.accent : .white,
+                glow: muted ? AppTheme.accent : nil
             ) {
                 Task { await toggleMute() }
             }
@@ -136,8 +141,8 @@ struct RemoteView: View {
 
             StepperPill(
                 label: "CH",
-                onUp: { run({ try await lg.channelUp() }, success: nil) },
-                onDown: { run({ try await lg.channelDown() }, success: nil) }
+                onUp: { run({ try await lg.channelUp() }, success: nil, haptic: false) },
+                onDown: { run({ try await lg.channelDown() }, success: nil, haptic: false) }
             )
         }
         .frame(height: 150)
@@ -190,16 +195,16 @@ struct RemoteView: View {
         .tint(.white)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(RemoteTheme.danger.opacity(0.9))
+        .background(AppTheme.danger.opacity(0.9))
     }
 
     // MARK: - Actions
 
-    /// Runs a command. `success == nil` keeps it silent on success (used for the
-    /// D-pad and other high-frequency keys); errors always toast. A light haptic
-    /// fires on every press for tactile feedback.
-    private func run(_ action: @escaping () async throws -> Void, success: String?) {
-        Haptics.tap()
+    /// Runs a command. `success == nil` keeps it silent on success; errors
+    /// always toast. `haptic` fires a light tap on press (disable it where a
+    /// hold-repeat / stronger haptic already covers feedback).
+    private func run(_ action: @escaping () async throws -> Void, success: String?, haptic: Bool = true) {
+        if haptic { Haptics.tap() }
         Task {
             do {
                 try await action()
@@ -261,42 +266,6 @@ struct RemoteView: View {
     }
 }
 
-// MARK: - Haptics
-
-private enum Haptics {
-    private static let generator = UIImpactFeedbackGenerator(style: .light)
-    static func tap() {
-        generator.impactOccurred(intensity: 0.7)
-    }
-}
-
-// MARK: - Theme
-
-private enum RemoteTheme {
-    static let background = LinearGradient(
-        colors: [Color(red: 0.09, green: 0.10, blue: 0.13), Color(red: 0.02, green: 0.02, blue: 0.04)],
-        startPoint: .top, endPoint: .bottom
-    )
-    static let accent = Color(red: 0.98, green: 0.0, blue: 0.27)
-    static let danger = Color(red: 0.95, green: 0.18, blue: 0.20)
-
-    /// Raised dark key — lighter at the top, darker at the bottom.
-    static let keyFill = LinearGradient(
-        colors: [Color(white: 0.24), Color(white: 0.11)],
-        startPoint: .top, endPoint: .bottom
-    )
-    /// Glossy white for the D-pad arcs and OK hub.
-    static let glossWhite = LinearGradient(
-        colors: [Color.white, Color(white: 0.97), Color(white: 0.80)],
-        startPoint: .top, endPoint: .bottom
-    )
-    /// Thin top highlight stroke used to fake a lit top edge.
-    static let edgeHighlight = LinearGradient(
-        colors: [Color.white.opacity(0.22), Color.white.opacity(0.02)],
-        startPoint: .top, endPoint: .bottom
-    )
-}
-
 // MARK: - Dark glass key
 
 private struct RemoteKey: View {
@@ -305,8 +274,6 @@ private struct RemoteKey: View {
     var tint: Color = .white
     var glow: Color? = nil
     let action: () -> Void
-
-    private let corner: CGFloat = 20
 
     var body: some View {
         Button(action: action) {
@@ -319,14 +286,7 @@ private struct RemoteKey: View {
             .foregroundStyle(tint)
             .frame(maxWidth: .infinity, minHeight: 56)
             .padding(.vertical, 6)
-            .background(RemoteTheme.keyFill, in: RoundedRectangle(cornerRadius: corner, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: corner, style: .continuous)
-                    .stroke(RemoteTheme.edgeHighlight, lineWidth: 1)
-            )
-            .shadow(color: (glow ?? .black).opacity(glow == nil ? 0.5 : 0.55),
-                    radius: glow == nil ? 8 : 14, x: 3, y: 6)
-            .shadow(color: .white.opacity(0.05), radius: 5, x: -3, y: -4)
+            .glassCard(corner: 20, glow: glow)
         }
         .buttonStyle(PressableStyle())
     }
@@ -344,8 +304,8 @@ private struct CircleKey: View {
                 .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: 54, height: 54)
-                .background(RemoteTheme.keyFill, in: Circle())
-                .overlay(Circle().stroke(RemoteTheme.edgeHighlight, lineWidth: 1))
+                .background(AppTheme.keyFill, in: Circle())
+                .overlay(Circle().stroke(AppTheme.edgeHighlight, lineWidth: 1))
                 .shadow(color: .black.opacity(0.5), radius: 6, x: 2, y: 4)
                 .shadow(color: .white.opacity(0.05), radius: 4, x: -2, y: -3)
         }
@@ -353,14 +313,12 @@ private struct CircleKey: View {
     }
 }
 
-// MARK: - Vertical stepper (VOL / CH)
+// MARK: - Vertical stepper (VOL / CH) — hold to repeat
 
 private struct StepperPill: View {
     let label: String
     let onUp: () -> Void
     let onDown: () -> Void
-
-    private let corner: CGFloat = 28
 
     var body: some View {
         VStack(spacing: 0) {
@@ -373,24 +331,16 @@ private struct StepperPill: View {
         }
         .frame(width: 74)
         .frame(maxHeight: .infinity)
-        .background(RemoteTheme.keyFill, in: RoundedRectangle(cornerRadius: corner, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: corner, style: .continuous)
-                .stroke(RemoteTheme.edgeHighlight, lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.5), radius: 8, x: 3, y: 6)
-        .shadow(color: .white.opacity(0.05), radius: 5, x: -3, y: -4)
+        .glassCard(corner: 28)
     }
 
     private func half(systemImage: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(PressableStyle())
+        Image(systemName: systemImage)
+            .font(.system(size: 22, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .holdRepeat(action: action)
     }
 }
 
@@ -423,7 +373,7 @@ private struct AppButton: View {
     }
 }
 
-// MARK: - Glossy circular D-pad
+// MARK: - Glossy circular D-pad — hold arrows to repeat
 
 private struct DPadWheel: View {
     var size: CGFloat = 208
@@ -440,7 +390,7 @@ private struct DPadWheel: View {
         ZStack {
             // Ambient glow + recessed base ring for depth.
             Circle()
-                .fill(RemoteTheme.accent.opacity(0.16))
+                .fill(AppTheme.accent.opacity(0.16))
                 .frame(width: size * 1.06, height: size * 1.06)
                 .blur(radius: 32)
             Circle()
@@ -470,8 +420,7 @@ private struct DPadWheel: View {
         let dy = sin(rad) * iconRadius
 
         return shape
-            .fill(RemoteTheme.glossWhite)
-            // Soft top sheen for a glassy 3D surface.
+            .fill(AppTheme.glossWhite)
             .overlay(
                 shape.fill(
                     LinearGradient(
@@ -489,9 +438,9 @@ private struct DPadWheel: View {
                     .foregroundStyle(Color(white: 0.30))
                     .offset(x: dx, y: dy)
             )
-            .contentShape(shape)
-            .onTapGesture(perform: action)
             .shadow(color: .black.opacity(0.5), radius: 9, x: 0, y: 5)
+            .contentShape(shape)
+            .holdRepeat(action: action)
     }
 
     private var okButton: some View {
@@ -535,16 +484,5 @@ private struct AnnularSector: Shape {
         path.addArc(center: center, radius: inner, startAngle: endAngle, endAngle: startAngle, clockwise: true)
         path.closeSubpath()
         return path
-    }
-}
-
-// MARK: - Press feedback
-
-private struct PressableStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.93 : 1)
-            .brightness(configuration.isPressed ? -0.04 : 0)
-            .animation(.spring(response: 0.22, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }

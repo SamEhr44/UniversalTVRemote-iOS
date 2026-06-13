@@ -15,69 +15,79 @@ struct PairingView: View {
     @State private var busy = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            deviceCard
-                .padding(.horizontal, 24)
-                .padding(.top, 24)
+        ZStack {
+            AppTheme.background.ignoresSafeArea()
+            ParticleField(count: 30)
 
-            Spacer()
+            VStack(alignment: .leading, spacing: 0) {
+                deviceCard
+                    .padding(.horizontal, 24)
+                    .padding(.top, 24)
 
-            Group {
-                if let errorMessage {
-                    PairingErrorView(message: errorMessage)
-                } else {
-                    PairingProgressView(lg: lg)
-                }
-            }
-            .frame(maxWidth: .infinity)
+                Spacer()
 
-            Spacer()
-
-            VStack(spacing: 12) {
-                if errorMessage != nil {
-                    Button {
-                        Task { await startPairing() }
-                    } label: {
-                        Label("Retry", systemImage: "arrow.clockwise")
-                            .frame(maxWidth: .infinity, minHeight: 32)
+                Group {
+                    if let errorMessage {
+                        PairingErrorView(message: errorMessage)
+                    } else {
+                        PairingProgressView(lg: lg)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(busy)
                 }
+                .frame(maxWidth: .infinity)
 
-                Button(role: .cancel) {
-                    Task { await cancel() }
-                } label: {
-                    Text("Cancel").frame(maxWidth: .infinity, minHeight: 32)
+                Spacer()
+
+                VStack(spacing: 12) {
+                    if errorMessage != nil {
+                        Button {
+                            Task { await startPairing() }
+                        } label: {
+                            Label("Retry", systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(AccentButtonStyle(disabled: busy))
+                        .disabled(busy)
+                    }
+
+                    Button(role: .cancel) {
+                        Task { await cancel() }
+                    } label: {
+                        Text("Cancel")
+                    }
+                    .buttonStyle(GlassButtonStyle())
+
+                    Text("Tip: enable \"Mobile TV On\" / LG Connect Apps on the TV if pairing "
+                        + "never prompts.")
+                        .font(.footnote)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.white.opacity(0.5))
                 }
-                .buttonStyle(.bordered)
-
-                Text("Tip: enable \"Mobile TV On\" / LG Connect Apps on the TV if pairing "
-                    + "never prompts.")
-                    .font(.footnote)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
+                .padding(24)
             }
-            .padding(24)
         }
         .navigationTitle("Pair with \(device.name)")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .preferredColorScheme(.dark)
         .task { await startPairing() }
     }
 
     private var deviceCard: some View {
         HStack(spacing: 16) {
-            Image(systemName: "tv").font(.largeTitle)
+            Image(systemName: "tv")
+                .font(.largeTitle)
+                .foregroundStyle(.white)
+                .frame(width: 52, height: 52)
+                .background(AppTheme.accent.opacity(0.25), in: Circle())
+                .overlay(Circle().stroke(AppTheme.edgeHighlight, lineWidth: 1))
             VStack(alignment: .leading, spacing: 2) {
-                Text(device.name).font(.headline)
-                Text(device.ip).font(.subheadline).foregroundStyle(.secondary)
+                Text(device.name).font(.headline).foregroundStyle(.white)
+                Text(device.ip).font(.subheadline).foregroundStyle(.white.opacity(0.55))
             }
             Spacer()
         }
         .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .glassCard(corner: 18)
     }
 
     private func startPairing() async {
@@ -89,11 +99,7 @@ struct PairingView: View {
                 ip: device.ip,
                 clientKey: device.clientKey
             )
-
-            // Best-effort: learn the TV's MAC so we can Wake-on-LAN it later.
             let mac = try? await lg.fetchMacAddress()
-
-            // Persist the (possibly new) client-key for future silent reconnects.
             let paired = device.copyWith(
                 clientKey: clientKey,
                 macAddress: mac,
@@ -101,6 +107,7 @@ struct PairingView: View {
             )
             await store.savePairedTV(paired)
 
+            Haptics.medium()
             // Replace this screen with the remote so Back returns to the scan list.
             if !path.isEmpty { path.removeLast() }
             path.append(.remote(paired))
@@ -133,21 +140,29 @@ private struct PairingProgressView: View {
 
     var body: some View {
         let promptShown = lg.pairingState == .promptShown
-        VStack(spacing: 16) {
-            ProgressView()
-            Image(systemName: promptShown ? "hand.tap" : "wifi")
-                .font(.system(size: 48))
-                .foregroundStyle(.tint)
+        VStack(spacing: 18) {
+            ZStack {
+                Circle()
+                    .fill(AppTheme.accent.opacity(0.18))
+                    .frame(width: 130, height: 130)
+                    .blur(radius: 24)
+                Image(systemName: promptShown ? "hand.tap.fill" : "wifi")
+                    .font(.system(size: 52))
+                    .foregroundStyle(.white)
+                    .symbolEffect(.pulse, options: .repeating)
+            }
+            ProgressView().tint(AppTheme.accent)
             Text(promptShown
                 ? "Accept the pairing request on your LG TV."
                 : "Connecting to the TV…")
                 .font(.headline)
+                .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
             if let message = lg.statusMessage {
                 Text(message)
                     .font(.footnote)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.55))
             }
         }
         .padding(.horizontal, 24)
@@ -159,14 +174,14 @@ private struct PairingErrorView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Image(systemName: "exclamationmark.triangle")
+            Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 48))
-                .foregroundStyle(.red)
-            Text("Pairing failed").font(.headline)
+                .foregroundStyle(AppTheme.danger)
+            Text("Pairing failed").font(.headline).foregroundStyle(.white)
             Text(message)
                 .font(.footnote)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.55))
         }
         .padding(.horizontal, 24)
     }
