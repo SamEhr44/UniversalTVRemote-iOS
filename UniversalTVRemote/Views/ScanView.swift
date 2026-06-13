@@ -49,28 +49,41 @@ final class ScanViewModel: ObservableObject {
         }
     }
 
-    /// Records the best name for a candidate and, once per IP, probes its ports
-    /// to classify the brand authoritatively (mDNS/SSDP types are unreliable).
+    /// Lists a discovered candidate immediately using the brand implied by the
+    /// discovery signal or its name, then runs a one-time port probe to confirm
+    /// or upgrade the classification. The probe NEVER removes a device — so a
+    /// flaky probe can't make the list go empty.
     private func consider(_ candidate: TVDevice) {
-        let best = Self.preferName(bestNames[candidate.ip], candidate.name)
-        bestNames[candidate.ip] = best
-        if let idx = discovered.firstIndex(where: { $0.ip == candidate.ip }) {
-            discovered[idx] = discovered[idx].copyWith(name: best)
+        let ip = candidate.ip
+        let best = Self.preferName(bestNames[ip], candidate.name)
+        bestNames[ip] = best
+
+        // Best brand we can tell right now (mDNS/SSDP hint, else from the name).
+        let hinted = candidate.resolvedBrand != .unknown
+            ? candidate.resolvedBrand
+            : TVBrand.infer(fromName: best)
+        if hinted != .unknown {
+            upsert(ip: ip, brand: hinted)
+        } else if let idx = discovered.firstIndex(where: { $0.ip == ip }) {
+            discovered[idx] = discovered[idx].copyWith(name: best)   // refresh name only
         }
 
-        guard !probed.contains(candidate.ip) else { return }
-        probed.insert(candidate.ip)
-        let ip = candidate.ip
+        guard !probed.contains(ip) else { return }
+        probed.insert(ip)
         Task { [weak self] in
-            guard let brand = await BrandProbe.detect(ip: ip) else { return }
-            guard let self else { return }
-            let name = self.bestNames[ip] ?? Self.fallbackName(brand: brand, ip: ip)
-            let device = TVDevice(ip: ip, name: name, brand: brand)
-            if let idx = self.discovered.firstIndex(where: { $0.ip == ip }) {
-                self.discovered[idx] = device
-            } else {
-                self.discovered.append(device)
-            }
+            let detected = await BrandProbe.detect(ip: ip)
+            guard let self, let detected else { return }   // probe only adds/refines
+            self.upsert(ip: ip, brand: detected)
+        }
+    }
+
+    private func upsert(ip: String, brand: TVBrand) {
+        let name = bestNames[ip] ?? Self.fallbackName(brand: brand, ip: ip)
+        let device = TVDevice(ip: ip, name: name, brand: brand)
+        if let idx = discovered.firstIndex(where: { $0.ip == ip }) {
+            discovered[idx] = device
+        } else {
+            discovered.append(device)
         }
     }
 

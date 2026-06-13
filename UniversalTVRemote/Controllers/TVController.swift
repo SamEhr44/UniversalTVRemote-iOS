@@ -40,6 +40,18 @@ enum TVBrand: String, Codable, CaseIterable {
         case .unknown: return ""
         }
     }
+
+    /// Best-effort brand guess from a discovered/stored device name.
+    static func infer(fromName name: String) -> TVBrand {
+        let lower = name.lowercased()
+        if lower.contains("webos") || lower.contains("[lg]") || lower.contains("lg ") { return .lg }
+        if lower.contains("roku") { return .roku }
+        if lower.contains("samsung") { return .samsung }
+        if lower.contains("vizio") { return .vizio }
+        if lower.contains("bravia") || lower.contains("sony") || lower.contains("google tv")
+            || lower.contains("android") || lower.contains("chromecast") { return .androidTV }
+        return .unknown
+    }
 }
 
 /// The universal set of remote commands. Not every TV supports every key —

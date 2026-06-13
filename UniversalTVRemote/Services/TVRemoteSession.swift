@@ -78,9 +78,11 @@ final class TVRemoteSession: ObservableObject {
         if device.resolvedBrand == .unknown {
             phase = .connecting
             statusMessage = "Identifying TV…"
-            if let detected = await BrandProbe.detect(ip: device.ip) {
-                device = device.copyWith(brand: detected)
-            }
+            // Cheap name guess first (handles devices paired before brands), then
+            // fall back to an active port probe.
+            var brand = TVBrand.infer(fromName: device.name)
+            if brand == .unknown { brand = await BrandProbe.detect(ip: device.ip) ?? .unknown }
+            if brand != .unknown { device = device.copyWith(brand: brand) }
         }
 
         let controller = TVControllerFactory.make(for: device)
