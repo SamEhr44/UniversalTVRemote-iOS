@@ -65,6 +65,21 @@ Not affiliated with, endorsed by, or sponsored by LG or Vizio. All product names
 First release. Control LG webOS and Vizio SmartCast TVs from your iPhone over Wi-Fi: automatic discovery, easy pairing, and a full on-screen remote.
 ```
 
+## Screenshots (this app is iPhone-only)
+The app ships as **iPhone-only** (`TARGETED_DEVICE_FAMILY = 1`), so no iPad
+screenshots are required. Upload the files in `screenshots/` to the matching slot
+— either size satisfies App Store Connect's iPhone requirement:
+
+| App Store Connect slot | Files (in `docs/appstore/screenshots/`) | Pixels |
+|---|---|---|
+| 6.9" iPhone (preferred) | `*-iphone6.9-1290x2796.png` | 1290 × 2796 |
+| 6.5" iPhone | `*-iphone6.5-1284x2778.png` | 1284 × 2778 |
+
+You only need to fill **one** iPhone size (Apple scales it to the others). Upload
+both the Remote (`01-remote-…`) and device-list (`02-scan-…`) shots to that slot.
+These are clean Simulator captures; you can replace them with real-device
+screenshots anytime.
+
 ## Other App Store Connect fields
 - **Category:** Utilities (primary). Optional secondary: Entertainment.
 - **Support URL:** required — a page with your contact (a GitHub repo README or a
