@@ -130,6 +130,13 @@ final class ScanViewModel: ObservableObject {
         path.append(.pairing(merged))
     }
 
+    /// Removes a TV from "Previously paired" (forgetting its stored token), then
+    /// refreshes the list. The TV can then be re-discovered by a scan.
+    func forget(_ device: TVDevice) async {
+        await store.removePairedTV(device.ip)
+        await loadPaired()
+    }
+
     func wake(_ device: TVDevice) -> (message: String, isError: Bool) {
         guard let mac = device.macAddress, !mac.isEmpty else {
             return ("Connect once while the TV is on to enable Wake-on-LAN.", false)
@@ -198,6 +205,12 @@ struct ScanView: View {
                                            onWake: {
                                                let r = model.wake(tv)
                                                toastCenter.show(r.message, isError: r.isError)
+                                           },
+                                           onForget: {
+                                               Task {
+                                                   await model.forget(tv)
+                                                   toastCenter.show("Forgot \(tv.name).")
+                                               }
                                            })
                             }
                         }
@@ -311,6 +324,7 @@ private struct DeviceCard: View {
     let isPaired: Bool
     let onTap: () -> Void
     let onWake: (() -> Void)?
+    var onForget: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 14) {
@@ -350,6 +364,13 @@ private struct DeviceCard: View {
         .glassCard(corner: 18)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
+        .contextMenu {
+            if let onForget {
+                Button(role: .destructive, action: onForget) {
+                    Label("Forget this TV", systemImage: "trash")
+                }
+            }
+        }
     }
 }
 
