@@ -41,6 +41,16 @@ enum TVBrand: String, Codable, CaseIterable {
         }
     }
 
+    /// Brands surfaced to the user in this release. LG and Vizio are verified on
+    /// real hardware; Roku/Samsung/Android TV controllers remain in the codebase
+    /// but are hidden from discovery and manual entry until verified (so the App
+    /// Store build only advertises what actually works). Add brands here as they
+    /// pass on-device testing.
+    static let supported: [TVBrand] = [.lg, .vizio]
+
+    /// Whether this brand is exposed in the UI/discovery in this release.
+    var isSupported: Bool { TVBrand.supported.contains(self) }
+
     /// Best-effort brand guess from a discovered/stored device name.
     static func infer(fromName name: String) -> TVBrand {
         let lower = name.lowercased()

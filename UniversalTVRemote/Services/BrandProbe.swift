@@ -21,17 +21,16 @@ enum BrandProbe {
     /// Probes `ip` for each brand in parallel and returns the matching brand, or
     /// nil if none answer (not a TV we control). Never throws — failures are nil.
     static func detect(ip: String, timeout: TimeInterval = 2.0) async -> TVBrand? {
-        async let roku = probeRoku(ip, timeout)
-        async let samsung = probeSamsung(ip, timeout)
+        // Only the brands shipped in this release are probed (see
+        // TVBrand.supported). probeRoku/probeSamsung remain below, ready to be
+        // re-enabled here once verified on hardware.
         async let vizio = probeVizio(ip, timeout)
         async let lg = probeLG(ip, timeout)
 
-        let (r, s, v, l) = await (roku, samsung, vizio, lg)
+        let (v, l) = await (vizio, lg)
 
-        // Most specific / content-verified probes win first; LG (a bare
-        // port-open check) is the weakest signal, so it's considered last.
-        if r { return .roku }
-        if s { return .samsung }
+        // Vizio (a content/HTTP-verified reply) wins over LG (a bare port-open
+        // check), which is the weakest signal.
         if v { return .vizio }
         if l { return .lg }
         return nil

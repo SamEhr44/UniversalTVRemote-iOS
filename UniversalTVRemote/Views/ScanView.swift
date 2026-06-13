@@ -62,10 +62,12 @@ final class ScanViewModel: ObservableObject {
         bestNames[ip] = best
 
         // Best brand we can tell right now (mDNS/SSDP hint, else from the name).
+        // Only list brands shipped in this release — an unsupported hint (or one
+        // inferred from a name) is treated as "not yet a listable TV".
         let hinted = candidate.resolvedBrand != .unknown
             ? candidate.resolvedBrand
             : TVBrand.infer(fromName: best)
-        if hinted != .unknown {
+        if hinted.isSupported {
             upsert(ip: ip, brand: hinted)
         } else if let idx = discovered.firstIndex(where: { $0.ip == ip }) {
             discovered[idx] = discovered[idx].copyWith(name: best)   // refresh name only
@@ -75,7 +77,7 @@ final class ScanViewModel: ObservableObject {
         probed.insert(ip)
         Task { [weak self] in
             let detected = await BrandProbe.detect(ip: ip)
-            guard let self, let detected else { return }   // probe only adds/refines
+            guard let self, let detected, detected.isSupported else { return }   // probe only adds/refines
             self.upsert(ip: ip, brand: detected)
         }
     }
@@ -266,7 +268,7 @@ private struct ManualEntrySheet: View {
     @State private var ip = ""
     @State private var brand: TVBrand = .lg
 
-    private let brands: [TVBrand] = [.lg, .roku, .samsung, .vizio, .androidTV]
+    private let brands: [TVBrand] = TVBrand.supported
 
     var body: some View {
         NavigationStack {

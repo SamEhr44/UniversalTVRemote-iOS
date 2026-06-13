@@ -13,13 +13,12 @@ final class BonjourDiscoveryService {
         let brand: TVBrand?   // nil → infer from the advertised name
     }
 
+    // Trimmed to the brands shipped in this release (LG + Vizio). Samsung /
+    // Android TV service types are omitted here and from Info.plist's
+    // NSBonjourServices (which must stay in sync) until those brands ship.
     private static let serviceTypes: [ServiceType] = [
         ServiceType(type: "_lg-smart-device._tcp", brand: .lg),
-        ServiceType(type: "_samsungmsf._tcp", brand: .samsung),
         ServiceType(type: "_viziocast._tcp", brand: .vizio),
-        // Android TV's specific remote service. (Intentionally NOT _googlecast,
-        // which Vizio SmartCast and Chromecasts also advertise — too ambiguous.)
-        ServiceType(type: "_androidtvremote2._tcp", brand: .androidTV),
         ServiceType(type: "_airplay._tcp", brand: nil),
     ]
 

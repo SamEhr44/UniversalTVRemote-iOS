@@ -7,15 +7,18 @@
 	     (Not enforced on the iOS Simulator, which uses the Mac's network.) -->
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>This app needs local network access to find and control TVs on your Wi-Fi network.</string>
+	<!-- Standard HTTPS/TLS only (exempt encryption) — declaring this skips the
+	     export-compliance prompt on every App Store upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<!-- Bonjour service types the app browses via NWBrowser. iOS blocks
 	     browsing any service type NOT listed here, so this must match the
-	     types in BonjourDiscoveryService exactly. -->
+	     types in BonjourDiscoveryService exactly. Trimmed to the brands shipped
+	     in this release (LG + Vizio); _airplay surfaces LG (and other) TVs. -->
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_lg-smart-device._tcp</string>
-		<string>_samsungmsf._tcp</string>
 		<string>_viziocast._tcp</string>
-		<string>_androidtvremote2._tcp</string>
 		<string>_airplay._tcp</string>
 	</array>
 	<!-- App Transport Security: TVs on the LAN use plaintext ws:// and
