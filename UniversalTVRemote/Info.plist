@@ -13,8 +13,8 @@
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_lg-smart-device._tcp</string>
+		<string>_samsungmsf._tcp</string>
 		<string>_airplay._tcp</string>
-		<string>_lgsmarttv._tcp</string>
 	</array>
 	<!-- App Transport Security: TVs on the LAN use plaintext ws:// and
 	     self-signed wss:// endpoints, so allow arbitrary local-network loads. -->

@@ -36,6 +36,11 @@ struct TVDevice: Codable, Identifiable, Equatable, Hashable {
     /// ISO-8601 timestamp of the last successful connection, if any.
     var lastConnectedAt: String?
 
+    /// Which protocol family this TV speaks. Optional for backward-compatible
+    /// decoding of devices stored before multi-brand support; use
+    /// `resolvedBrand` to read it with an `.unknown` fallback.
+    var brand: TVBrand?
+
     init(
         ip: String,
         name: String,
@@ -45,7 +50,8 @@ struct TVDevice: Codable, Identifiable, Equatable, Hashable {
         usn: String? = nil,
         clientKey: String? = nil,
         macAddress: String? = nil,
-        lastConnectedAt: String? = nil
+        lastConnectedAt: String? = nil,
+        brand: TVBrand? = nil
     ) {
         self.ip = ip
         self.name = name
@@ -56,10 +62,14 @@ struct TVDevice: Codable, Identifiable, Equatable, Hashable {
         self.clientKey = clientKey
         self.macAddress = macAddress
         self.lastConnectedAt = lastConnectedAt
+        self.brand = brand
     }
 
     /// `Identifiable` conformance — a TV is identified by its IP address.
     var id: String { ip }
+
+    /// The brand, defaulting to `.unknown` when not yet determined/stored.
+    var resolvedBrand: TVBrand { brand ?? .unknown }
 
     /// Whether we already hold a stored client-key for this TV (skips the
     /// on-TV approval prompt on reconnect).
@@ -79,7 +89,8 @@ struct TVDevice: Codable, Identifiable, Equatable, Hashable {
         usn: String? = nil,
         clientKey: String? = nil,
         macAddress: String? = nil,
-        lastConnectedAt: String? = nil
+        lastConnectedAt: String? = nil,
+        brand: TVBrand? = nil
     ) -> TVDevice {
         TVDevice(
             ip: ip ?? self.ip,
@@ -90,7 +101,8 @@ struct TVDevice: Codable, Identifiable, Equatable, Hashable {
             usn: usn ?? self.usn,
             clientKey: clientKey ?? self.clientKey,
             macAddress: macAddress ?? self.macAddress,
-            lastConnectedAt: lastConnectedAt ?? self.lastConnectedAt
+            lastConnectedAt: lastConnectedAt ?? self.lastConnectedAt,
+            brand: brand ?? self.brand
         )
     }
 

@@ -6,7 +6,7 @@ enum RemoteRoute: Hashable {
     case remote(TVDevice)
 }
 
-/// Owns scan state and the long-lived services shared across the flow.
+/// Owns scan state and the long-lived session shared across the flow.
 @MainActor
 final class ScanViewModel: ObservableObject {
     @Published var discovered: [TVDevice] = []
@@ -15,8 +15,8 @@ final class ScanViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var path: [RemoteRoute] = []
 
-    // One shared connection service for the whole session.
-    let lg = LGWebOSService()
+    // One shared session for the whole flow.
+    let session = TVRemoteSession()
     let store = PairedTVStore()
 
     private let ssdp = SSDPDiscoveryService()
@@ -24,9 +24,7 @@ final class ScanViewModel: ObservableObject {
     private let wol = WakeOnLanService()
     private var scanTask: Task<Void, Never>?
 
-    func loadPaired() async {
-        paired = await store.getAllPairedTVs()
-    }
+    func loadPaired() async { paired = await store.getAllPairedTVs() }
 
     func startScan() {
         scanTask?.cancel()
@@ -34,50 +32,46 @@ final class ScanViewModel: ObservableObject {
         errorMessage = nil
         discovered.removeAll()
 
-        // Run SSDP (works in the simulator) and Bonjour (works on a physical
-        // phone without the multicast entitlement) concurrently; both feed the
-        // same deduped list.
         let ssdpStream = ssdp.discover()
         let bonjourStream = bonjour.discover()
-
         scanTask = Task { [weak self] in
             guard let self else { return }
             await withTaskGroup(of: Void.self) { group in
-                group.addTask {
-                    for await device in ssdpStream { await self.add(device) }
-                }
-                group.addTask {
-                    for await device in bonjourStream { await self.add(device) }
-                }
+                group.addTask { for await d in ssdpStream { await self.add(d) } }
+                group.addTask { for await d in bonjourStream { await self.add(d) } }
             }
             isScanning = false
         }
     }
 
-    /// Adds or replaces a discovered device, deduped by IP. Replacing lets a
-    /// nicer friendly name (from either source) supersede an earlier entry.
+    /// Adds/updates a discovered device, deduped by IP. Keeps a known brand if a
+    /// later hit for the same IP is unclassified.
     private func add(_ device: TVDevice) {
-        discovered.removeAll { $0.ip == device.ip }
-        discovered.append(device)
+        if let idx = discovered.firstIndex(where: { $0.ip == device.ip }) {
+            let keepBrand = device.resolvedBrand == .unknown ? discovered[idx].brand : device.brand
+            discovered[idx] = device.copyWith(brand: keepBrand)
+        } else {
+            discovered.append(device)
+        }
     }
 
-    /// Connects to a manually-entered IP address (bypasses discovery, which iOS
-    /// blocks on physical devices without the multicast entitlement).
-    func openManualIP(_ ip: String) async {
+    /// Connects to a manually-entered IP with an explicitly chosen brand.
+    func openManual(ip: String, brand: TVBrand) async {
         let trimmed = ip.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
-        await open(TVDevice(ip: trimmed, name: "LG TV (\(trimmed))"))
+        await open(TVDevice(ip: trimmed, name: "\(brand.displayName) (\(trimmed))", brand: brand))
     }
 
-    /// Merges a stored client-key/MAC into a tapped device, then routes to pairing.
+    /// Merges a stored token/MAC/brand into a tapped device, then routes to pairing.
     func open(_ device: TVDevice) async {
         let stored = await store.getPairedTV(device.ip)
         let merged: TVDevice
         if let stored {
             merged = device.copyWith(
-                name: device.name.hasPrefix("LG ") ? stored.name : device.name,
+                name: device.name.contains("(") ? stored.name : device.name,
                 clientKey: stored.clientKey,
-                macAddress: stored.macAddress
+                macAddress: stored.macAddress,
+                brand: device.brand ?? stored.brand
             )
         } else {
             merged = device
@@ -85,8 +79,6 @@ final class ScanViewModel: ObservableObject {
         path.append(.pairing(merged))
     }
 
-    /// Sends a Wake-on-LAN magic packet to power a previously-paired TV back on.
-    /// Returns a user-facing result message.
     func wake(_ device: TVDevice) -> (message: String, isError: Bool) {
         guard let mac = device.macAddress, !mac.isEmpty else {
             return ("Connect once while the TV is on to enable Wake-on-LAN.", false)
@@ -100,13 +92,11 @@ final class ScanViewModel: ObservableObject {
     }
 }
 
-/// First screen: scans the local network for LG webOS TVs and lists them,
-/// alongside any previously paired TVs for quick reconnect.
+/// First screen: scans the network for controllable TVs across brands.
 struct ScanView: View {
     @StateObject private var model = ScanViewModel()
     @StateObject private var toastCenter = ToastCenter()
     @State private var showManualEntry = false
-    @State private var manualIP = ""
 
     var body: some View {
         NavigationStack(path: $model.path) {
@@ -117,8 +107,7 @@ struct ScanView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 16) {
                         Button {
-                            Haptics.tap()
-                            model.startScan()
+                            Haptics.tap(); model.startScan()
                         } label: {
                             HStack(spacing: 10) {
                                 if model.isScanning {
@@ -126,15 +115,14 @@ struct ScanView: View {
                                 } else {
                                     Image(systemName: "wifi")
                                 }
-                                Text(model.isScanning ? "Scanning…" : "Scan for LG TVs")
+                                Text(model.isScanning ? "Scanning…" : "Scan for TVs")
                             }
                         }
                         .buttonStyle(AccentButtonStyle(disabled: model.isScanning))
                         .disabled(model.isScanning)
 
                         Button {
-                            Haptics.tap()
-                            showManualEntry = true
+                            Haptics.tap(); showManualEntry = true
                         } label: {
                             Label("Add TV by IP address", systemImage: "keyboard")
                         }
@@ -143,16 +131,13 @@ struct ScanView: View {
                         if model.isScanning {
                             HStack(spacing: 10) {
                                 ProgressView().tint(AppTheme.accent)
-                                Text("Searching for LG TVs on your Wi-Fi…")
-                                    .font(.footnote)
-                                    .foregroundStyle(.white.opacity(0.6))
+                                Text("Searching your Wi-Fi for TVs…")
+                                    .font(.footnote).foregroundStyle(.white.opacity(0.6))
                                 Spacer()
                             }
                         }
 
-                        if let error = model.errorMessage {
-                            ErrorBanner(message: error)
-                        }
+                        if let error = model.errorMessage { ErrorBanner(message: error) }
 
                         if !model.paired.isEmpty {
                             SectionHeader("Previously paired")
@@ -173,8 +158,7 @@ struct ScanView: View {
                             let pairedIps = Set(model.paired.map(\.ip))
                             ForEach(model.discovered) { device in
                                 DeviceCard(device: device, isPaired: pairedIps.contains(device.ip),
-                                           onTap: { Task { await model.open(device) } },
-                                           onWake: nil)
+                                           onTap: { Task { await model.open(device) } }, onWake: nil)
                             }
                         }
                     }
@@ -182,38 +166,75 @@ struct ScanView: View {
                 }
                 .refreshable { model.startScan() }
             }
-            .navigationTitle("LG webOS Remote")
+            .navigationTitle("Universal Remote")
             .toolbarBackground(.hidden, for: .navigationBar)
             .toast(toastCenter)
-            .alert("Connect to a TV by IP", isPresented: $showManualEntry) {
-                TextField("192.168.1.131", text: $manualIP)
-                    .keyboardType(.numbersAndPunctuation)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                Button("Connect") {
-                    let ip = manualIP
-                    Task { await model.openManualIP(ip) }
+            .sheet(isPresented: $showManualEntry) {
+                ManualEntrySheet { ip, brand in
+                    Task { await model.openManual(ip: ip, brand: brand) }
                 }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("Enter the TV's IP address (shown in your router, the TV's "
-                    + "network settings, or another remote app).")
+                .presentationDetents([.medium])
+                .preferredColorScheme(.dark)
             }
             .navigationDestination(for: RemoteRoute.self) { route in
                 switch route {
                 case .pairing(let device):
-                    PairingView(lg: model.lg, store: model.store, device: device, path: $model.path)
+                    PairingView(session: model.session, store: model.store, device: device, path: $model.path)
                 case .remote(let device):
-                    RemoteView(lg: model.lg, store: model.store, device: device, path: $model.path)
+                    RemoteView(session: model.session, store: model.store, device: device, path: $model.path)
                 }
             }
         }
         .preferredColorScheme(.dark)
         .task { await model.loadPaired() }
         .onChange(of: model.path) {
-            if model.path.isEmpty {
-                Task { await model.loadPaired() }
+            if model.path.isEmpty { Task { await model.loadPaired() } }
+        }
+    }
+}
+
+// MARK: - Manual entry sheet
+
+private struct ManualEntrySheet: View {
+    let onConnect: (String, TVBrand) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var ip = ""
+    @State private var brand: TVBrand = .lg
+
+    private let brands: [TVBrand] = [.lg, .roku, .samsung, .vizio, .androidTV]
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AppTheme.background.ignoresSafeArea()
+                Form {
+                    Section("TV IP address") {
+                        TextField("192.168.1.131", text: $ip)
+                            .keyboardType(.numbersAndPunctuation)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    }
+                    Section("Brand") {
+                        Picker("Brand", selection: $brand) {
+                            ForEach(brands, id: \.self) { Text($0.displayName).tag($0) }
+                        }
+                        .pickerStyle(.menu)
+                    }
+                    Section {
+                        Button("Connect") {
+                            onConnect(ip, brand)
+                            dismiss()
+                        }
+                        .disabled(ip.trimmingCharacters(in: .whitespaces).isEmpty)
+                    } footer: {
+                        Text("Find the IP in your router or the TV's network settings.")
+                    }
+                }
+                .scrollContentBackground(.hidden)
             }
+            .navigationTitle("Add TV by IP")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
         }
     }
 }
@@ -225,9 +246,7 @@ private struct SectionHeader: View {
     init(_ title: String) { self.title = title }
     var body: some View {
         HStack {
-            Text(title.uppercased())
-                .font(.caption.weight(.bold))
-                .tracking(1.4)
+            Text(title.uppercased()).font(.caption.weight(.bold)).tracking(1.4)
                 .foregroundStyle(AppTheme.accent)
             Spacer()
         }
@@ -239,27 +258,24 @@ private struct DeviceCard: View {
     let device: TVDevice
     let isPaired: Bool
     let onTap: () -> Void
-    /// When provided, shows a Wake-on-LAN power button (for paired TVs).
     let onWake: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: "tv")
-                .font(.title3)
-                .foregroundStyle(.white)
+            Image(systemName: device.resolvedBrand.symbol)
+                .font(.title3).foregroundStyle(.white)
                 .frame(width: 44, height: 44)
                 .background(AppTheme.accent.opacity(0.25), in: Circle())
                 .overlay(Circle().stroke(AppTheme.edgeHighlight, lineWidth: 1))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(device.name).font(.body.weight(.semibold)).foregroundStyle(.white)
-                Text(device.ip).font(.subheadline).foregroundStyle(.white.opacity(0.55))
-                if let location = device.location {
-                    Text(location)
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.4))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                HStack(spacing: 6) {
+                    Text(device.ip).font(.subheadline).foregroundStyle(.white.opacity(0.55))
+                    if device.resolvedBrand != .unknown {
+                        Text("· \(device.resolvedBrand.displayName)")
+                            .font(.caption.weight(.semibold)).foregroundStyle(AppTheme.accent.opacity(0.9))
+                    }
                 }
             }
 
@@ -267,10 +283,7 @@ private struct DeviceCard: View {
 
             if isPaired {
                 if let onWake {
-                    Button {
-                        Haptics.tap()
-                        onWake()
-                    } label: {
+                    Button { Haptics.tap(); onWake() } label: {
                         Image(systemName: "power").font(.body.weight(.semibold))
                     }
                     .buttonStyle(PressableStyle())
@@ -278,16 +291,11 @@ private struct DeviceCard: View {
                     .frame(width: 36, height: 36)
                     .accessibilityLabel("Power on (Wake-on-LAN)")
                 }
-                Text("PAIRED")
-                    .font(.caption2.weight(.heavy))
-                    .foregroundStyle(.white.opacity(0.8))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                Text("PAIRED").font(.caption2.weight(.heavy)).foregroundStyle(.white.opacity(0.8))
+                    .padding(.horizontal, 8).padding(.vertical, 4)
                     .background(Color.white.opacity(0.10), in: Capsule())
             } else {
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.4))
+                Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(.white.opacity(0.4))
             }
         }
         .padding(14)
@@ -299,39 +307,26 @@ private struct DeviceCard: View {
 
 private struct EmptyStateView: View {
     let isScanning: Bool
-
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "tv.slash")
-                .font(.system(size: 40))
-                .foregroundStyle(.white.opacity(0.4))
-            Text(isScanning ? "Looking for TVs…" : "No LG TVs found yet")
-                .font(.headline)
-                .foregroundStyle(.white)
-            Text("Make sure your phone and LG TV are on the same Wi-Fi network and "
-                + "mobile control is enabled on the TV.")
-                .font(.footnote)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.white.opacity(0.5))
+            Image(systemName: "tv.slash").font(.system(size: 40)).foregroundStyle(.white.opacity(0.4))
+            Text(isScanning ? "Looking for TVs…" : "No TVs found yet").font(.headline).foregroundStyle(.white)
+            Text("Make sure your phone and TV are on the same Wi-Fi network and network "
+                + "control is enabled on the TV.")
+                .font(.footnote).multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.5))
         }
-        .frame(maxWidth: .infinity)
-        .padding(24)
-        .glassCard(corner: 18)
+        .frame(maxWidth: .infinity).padding(24).glassCard(corner: 18)
     }
 }
 
 private struct ErrorBanner: View {
     let message: String
-
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
-            Text(message)
-            Spacer(minLength: 0)
+            Text(message); Spacer(minLength: 0)
         }
-        .font(.subheadline)
-        .foregroundStyle(.white)
-        .padding(14)
+        .font(.subheadline).foregroundStyle(.white).padding(14)
         .background(AppTheme.danger.opacity(0.85), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
