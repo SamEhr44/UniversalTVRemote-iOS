@@ -13,6 +13,14 @@ on-screen remote — no backend, no vendor cloud.
 > grew into a brand-agnostic universal remote. Built to run in the **iOS
 > Simulator** in Xcode and on a physical iPhone.
 
+## Documentation
+
+For development, start with **[`CLAUDE.md`](CLAUDE.md)** (build/run, environment,
+code map), then:
+- [`docs/STATUS.md`](docs/STATUS.md) — goal, what's done, what's left.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — the brand-agnostic design.
+- [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) — current bugs and recommended fixes.
+
 ## Supported TVs
 
 Control is **network-based** (Wi-Fi/LAN) — iPhones have no IR blaster, so this
