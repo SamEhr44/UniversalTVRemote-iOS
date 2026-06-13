@@ -129,11 +129,13 @@ struct HoldRepeat: ViewModifier {
     @State private var repeater: Task<Void, Never>?
 
     func body(content: Content) -> some View {
+        // NOTE: do not set a contentShape here — the caller's contentShape
+        // (e.g. the D-pad arc) must define the hit region, otherwise stacked
+        // sectors would each capture their full bounding square.
         content
             .scaleEffect(isDown ? 0.93 : 1)
             .brightness(isDown ? -0.04 : 0)
             .animation(.spring(response: 0.22, dampingFraction: 0.6), value: isDown)
-            .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { _ in
