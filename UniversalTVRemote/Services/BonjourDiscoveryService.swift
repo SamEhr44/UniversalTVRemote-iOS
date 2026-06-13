@@ -16,6 +16,9 @@ final class BonjourDiscoveryService {
     private static let serviceTypes: [ServiceType] = [
         ServiceType(type: "_lg-smart-device._tcp", brand: .lg),
         ServiceType(type: "_samsungmsf._tcp", brand: .samsung),
+        ServiceType(type: "_viziocast._tcp", brand: .vizio),
+        ServiceType(type: "_androidtvremote2._tcp", brand: .androidTV),
+        ServiceType(type: "_googlecast._tcp", brand: .androidTV),
         ServiceType(type: "_airplay._tcp", brand: nil),
     ]
 

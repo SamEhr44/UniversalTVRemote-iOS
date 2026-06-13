@@ -4,14 +4,31 @@
 
 # Universal TV Remote (iOS / SwiftUI)
 
-A native **SwiftUI** iOS app that discovers **LG webOS TVs** on your local Wi-Fi
-network, pairs with them over the LG **SSAP WebSocket** protocol, stores the
-returned client-key, and gives you a working on-screen remote — no backend, no
-manual IP typing as the primary path, no vendor cloud.
+A native **SwiftUI** iOS app that discovers **smart TVs** on your local Wi-Fi
+network across multiple brands, pairs with them, and gives you a polished
+on-screen remote — no backend, no vendor cloud.
 
-> This is a faithful native-Swift port of the cross-platform Flutter project
-> [`TVRemoteProject`](https://github.com/SamEhr44/TVRemoteProject). It is built
-> to run in the **iOS Simulator** in Xcode (and on a physical iPhone).
+> Started as a native-Swift port of the Flutter project
+> [`TVRemoteProject`](https://github.com/SamEhr44/TVRemoteProject) (LG webOS) and
+> grew into a brand-agnostic universal remote. Built to run in the **iOS
+> Simulator** in Xcode and on a physical iPhone.
+
+## Supported TVs
+
+Control is **network-based** (Wi-Fi/LAN) — iPhones have no IR blaster, so this
+works with smart TVs, not legacy IR-only sets.
+
+| Brand | Protocol | Pairing | Status |
+|---|---|---|---|
+| **LG webOS** | SSAP WebSocket | on-TV prompt | ✅ full |
+| **Roku** (incl. TCL/Hisense Roku TVs) | ECP (HTTP) | none | ✅ full |
+| **Samsung** (Tizen) | remote WebSocket | on-TV "Allow" + token | ✅ full |
+| **Vizio** SmartCast | HTTPS REST | PIN shown on TV | ✅ core keys |
+| **Android TV / Google TV** | Remote v2 (protobuf/TLS) | PIN | 🚧 detection only |
+
+The app is built on a brand-agnostic `TVController` abstraction, so adding a
+brand is a self-contained controller — the discovery, pairing UI, and remote
+screen adapt automatically via per-brand capabilities.
 
 <p align="center">
   <img src="docs/scan-screen.png" alt="Scan screen" width="240">
@@ -112,9 +129,12 @@ xcodebuild -project UniversalTVRemote.xcodeproj \
 ## Tech Stack
 
 - **Swift / SwiftUI**
-- **POSIX UDP sockets** for SSDP discovery and Wake-on-LAN
-- **`URLSessionWebSocketTask`** for the SSAP WebSocket
-- **`UserDefaults`** for local storage of paired TVs / client keys
+- **`TVController` abstraction** with per-brand controllers (LG/Roku/Samsung/Vizio)
+- **POSIX UDP sockets** for SSDP discovery and Wake-on-LAN; **`NWBrowser`** for
+  Bonjour/mDNS discovery (brand-classified)
+- **`URLSessionWebSocketTask`** (LG SSAP, Samsung Tizen) and **`URLSession`**
+  REST/HTTP (Roku ECP, Vizio SmartCast)
+- **`UserDefaults`** for local storage of paired TVs / tokens
 - No backend.
 
 ## License

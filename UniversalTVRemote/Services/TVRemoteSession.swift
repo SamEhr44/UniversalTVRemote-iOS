@@ -12,8 +12,11 @@ enum TVControllerFactory {
             return RokuController(ip: device.ip)
         case .samsung:
             return SamsungController(ip: device.ip, token: device.clientKey)
-        case .vizio, .androidTV, .unknown:
-            // Implemented in a later pass; surfaces a clear message on connect.
+        case .vizio:
+            return VizioController(ip: device.ip, token: device.clientKey)
+        case .androidTV, .unknown:
+            // Android TV needs the Remote v2 (protobuf/TLS) pairing — a dedicated
+            // effort; surfaces a clear message on connect for now.
             return UnsupportedController(brand: device.resolvedBrand)
         }
     }

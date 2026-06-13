@@ -134,6 +134,7 @@ final class SSDPDiscoveryService {
     private static func classify(_ lower: String) -> TVBrand? {
         if lower.contains("roku") { return .roku }
         if lower.contains("samsung") { return .samsung }
+        if lower.contains("vizio") || lower.contains("smartcast") { return .vizio }
         if lower.contains("webos") || lower.contains("lge") || lower.contains("lg smart tv") || lower.contains("lgsmarttv") {
             return .lg
         }
@@ -145,6 +146,8 @@ final class SSDPDiscoveryService {
         case .lg: return "LG webOS TV (\(ip))"
         case .roku: return "Roku (\(ip))"
         case .samsung: return "Samsung TV (\(ip))"
+        case .vizio: return "Vizio SmartCast (\(ip))"
+        case .androidTV: return "Android TV (\(ip))"
         default: return "TV (\(ip))"
         }
     }
