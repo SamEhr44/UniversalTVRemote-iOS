@@ -156,6 +156,7 @@ final class VizioController: NSObject, TVController {
         case .right: return (3, 7)
         case .ok: return (3, 2)
         case .back: return (4, 0)
+        case .home: return (4, 3)   // SmartCast button → SmartCast home screen
         case .volumeUp: return (5, 1)
         case .volumeDown: return (5, 0)
         case .mute: return (5, 4)

@@ -48,8 +48,20 @@ discovery/classification is broken.
     reply → Vizio; self-signed cert accepted via a trust-all delegate)
   - LG: `GET http://ip:3000/` (any HTTP reply → port open → LG); weakest signal,
     checked last, with `TVBrand.infer(fromName:)` still the primary LG hint.
-  Probes run in parallel with a ~2s timeout. **Awaiting on-device confirmation**
-  that the LG + Vizio now appear/classify in "Discovered".
+  Probes run in parallel with a ~2s timeout. ✅ **Confirmed on device**: a
+  manual-IP connect to the Vizio (`192.168.1.212`) succeeds, proving URLSession
+  HTTPS reachability works on the phone. **But discovery still listed nothing** —
+  so the gap is upstream: Bonjour/SSDP simply don't surface these TVs' IPs on the
+  user's network (Vizio/LG advertise only ambiguous or no useful service types,
+  and SSDP multicast is dropped without the entitlement).
+- **(A2) Active subnet sweep** ✅ **DONE (commit pending).** Since URLSession
+  reachability is proven on device, `Services/SubnetScanService.swift` now sweeps
+  the phone's local /24 (`LocalNetwork.subnetPrefix24()` via `getifaddrs` on
+  `en0`) and runs `BrandProbe` against every host (≤40 concurrent, ~1.5s
+  timeout). Classified TVs stream into the existing `ScanViewModel.consider`
+  pipeline, so real TVs appear within ~1–2s. This is the entitlement-free
+  discovery path and should surface both the LG and Vizio. **Awaiting on-device
+  confirmation.** (Assumes a /24 — the common home case.)
 - **(B) Add the Multicast Networking entitlement** so SSDP works on device too
   (request at https://developer.apple.com/contact/request/networking-multicast,
   then add `com.apple.developer.networking.multicast` to a `.entitlements` file
@@ -66,13 +78,15 @@ discovery/classification is broken.
 
 ## #2 — Vizio control unverified / not connecting for the user
 
-`VizioController` implements SmartCast HTTPS with port fallback (9000/7345) and
-the PIN pairing flow, but the user hasn't successfully reached the PIN step —
-largely blocked by #1 (the Vizio doesn't appear to select). Once discovery is
-fixed, verify: select Vizio → TV shows a PIN → enter it → `AUTH_TOKEN` stored →
-keys work. Key codes are the documented SmartCast set; menu/info/media are
-intentionally not exposed (uncertain codes). Manual path to test in isolation:
-**Add TV by IP → Vizio → 192.168.1.212**.
+✅ **Vizio control confirmed working** via **Add TV by IP → Vizio →
+192.168.1.212**: connects, shows the PIN, pairs, stores `AUTH_TOKEN`, and keys
+work (verified on the user's V505-H9). Remaining: it doesn't yet appear via
+*discovery* (tracked under #1 — the subnet sweep should fix that).
+
+Fixed along the way: the **Home** button errored ("not available on Vizio")
+because `VizioController` had no `.home` mapping while `RemoteView` always shows
+Home. Mapped `.home` → SmartCast button (codeset 4, code 3). menu/info/media
+remain unexposed (uncertain codes).
 
 **Where to look:** `Controllers/VizioController.swift`.
 

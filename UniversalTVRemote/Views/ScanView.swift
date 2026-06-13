@@ -21,6 +21,7 @@ final class ScanViewModel: ObservableObject {
 
     private let ssdp = SSDPDiscoveryService()
     private let bonjour = BonjourDiscoveryService()
+    private let subnet = SubnetScanService()
     private let wol = WakeOnLanService()
     private var scanTask: Task<Void, Never>?
 
@@ -39,11 +40,13 @@ final class ScanViewModel: ObservableObject {
 
         let ssdpStream = ssdp.discover()
         let bonjourStream = bonjour.discover()
+        let subnetStream = subnet.discover()
         scanTask = Task { [weak self] in
             guard let self else { return }
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { for await d in ssdpStream { await self.consider(d) } }
                 group.addTask { for await d in bonjourStream { await self.consider(d) } }
+                group.addTask { for await d in subnetStream { await self.consider(d) } }
             }
             isScanning = false
         }

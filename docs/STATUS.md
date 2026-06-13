@@ -33,15 +33,17 @@ vendor cloud. Network-only (no IR; iPhones lack an IR blaster).
 | LG webOS | `LGController` | SSAP WebSocket 3000/3001 | on-TV prompt | ✅ works on the user's LG UR8000AUA |
 | Roku | `RokuController` | ECP HTTP 8060 | none | ⚠️ implemented, untested on hardware |
 | Samsung | `SamsungController` | Tizen WS 8002/8001 | Allow + token | ⚠️ implemented, untested |
-| Vizio | `VizioController` | SmartCast HTTPS 9000/7345 | PIN | ⚠️ implemented, **not yet working for the user** (see issues) |
+| Vizio | `VizioController` | SmartCast HTTPS 9000/7345 | PIN | ✅ works on the user's V505-H9 via Add-by-IP (pair + keys + Home); discovery pending |
 | Android TV | `UnsupportedController` | — | — | 🚧 detection only |
 
 ### Discovery
 - ✅ SSDP/UPnP M-SEARCH (POSIX UDP) with brand classification.
 - ✅ Bonjour/mDNS via `NWBrowser` (works on device without the multicast entitlement).
-- 🔄 `BrandProbe` reworked to **URLSession HTTP/HTTPS** reachability probes
-  (replacing the flaky `NWConnection` TCP probe) for authoritative on-device
-  classification — awaiting hardware confirmation (see `docs/KNOWN_ISSUES.md` #1).
+- ✅ `BrandProbe` reworked to **URLSession HTTP/HTTPS** reachability probes
+  (replacing the flaky `NWConnection` TCP probe). Confirmed reachable on device.
+- 🔄 `SubnetScanService` — active /24 sweep running `BrandProbe` on every host;
+  the entitlement-free discovery path. Awaiting hardware confirmation that it
+  lists the LG + Vizio (see `docs/KNOWN_ISSUES.md` #1).
 
 ## What still needs development
 
