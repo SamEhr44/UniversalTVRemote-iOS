@@ -31,15 +31,26 @@ final class RokuController: TVController {
         // No pairing — just confirm the device answers ECP and learn its MAC.
         do {
             let (data, response) = try await session.data(from: base.appendingPathComponent("query/device-info"))
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                throw TVError("Roku didn't respond on \(ip):8060.")
+            guard let http = response as? HTTPURLResponse else {
+                throw TVError("No response from \(ip):8060.")
             }
+            if http.statusCode == 403 {
+                let msg = "The Roku rejected control. On the TV enable Settings → System → "
+                    + "Advanced system settings → Control by mobile apps → \"Default\" (not Disabled)."
+                onPhaseChange?(.failed, msg)
+                throw TVError(msg)
+            }
+            guard http.statusCode == 200 else { throw TVError("Roku returned HTTP \(http.statusCode).") }
             let xml = String(decoding: data, as: UTF8.self)
             macAddress = Self.tag(xml, "wifi-mac") ?? Self.tag(xml, "ethernet-mac")
             onPhaseChange?(.connected, "Connected.")
+        } catch let error as TVError {
+            throw error
         } catch {
-            onPhaseChange?(.failed, "Could not reach the Roku at \(ip). Make sure it's on and on the same Wi-Fi.")
-            throw TVError("Could not reach the Roku. (\(error.localizedDescription))")
+            let msg = "Could not reach a Roku at \(ip):8060. Make sure it's powered on, on the same "
+                + "Wi-Fi, and that \"Control by mobile apps\" is enabled on the Roku."
+            onPhaseChange?(.failed, msg)
+            throw TVError(msg)
         }
     }
 

@@ -16,7 +16,6 @@
 		<string>_samsungmsf._tcp</string>
 		<string>_viziocast._tcp</string>
 		<string>_androidtvremote2._tcp</string>
-		<string>_googlecast._tcp</string>
 		<string>_airplay._tcp</string>
 	</array>
 	<!-- App Transport Security: TVs on the LAN use plaintext ws:// and

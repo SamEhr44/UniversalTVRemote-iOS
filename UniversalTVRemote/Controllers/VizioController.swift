@@ -1,14 +1,15 @@
 import Foundation
 
-/// Controls a Vizio SmartCast TV over its HTTPS REST API (port 9000, self-signed
-/// cert). Pairing is a PIN flow: `pairing/start` makes the TV show a code, the
-/// user types it, `pairing/pair` returns an `AUTH_TOKEN` reused on later
-/// connects. Keys are sent to `key_command/` as (codeset, code) pairs.
+/// Controls a Vizio SmartCast TV over its HTTPS REST API (self-signed cert).
+///
+/// SmartCast TVs listen on **port 9000** (newer) or **7345** (older 2016–2018
+/// sets), so we probe both. Pairing is a PIN flow: `pairing/start` makes the TV
+/// show a code, the user types it, `pairing/pair` returns an `AUTH_TOKEN` that's
+/// reused on later connects. Keys go to `key_command/` as (codeset, code) pairs.
 @MainActor
 final class VizioController: NSObject, TVController {
     let brand: TVBrand = .vizio
-    // Codes below are the well-documented SmartCast set; menu/info/media vary by
-    // firmware, so we expose only the reliably-mapped controls.
+    // Only the reliably-documented SmartCast codes are exposed.
     let capabilities: RemoteCapabilities = [.dpad, .volume, .mute, .channel, .power]
 
     private(set) var pairingToken: String?      // AUTH_TOKEN
@@ -17,7 +18,10 @@ final class VizioController: NSObject, TVController {
     private let ip: String
     private let deviceId = "universal-tv-remote"
     private let deviceName = "Universal TV Remote"
+    private static let candidatePorts = [9000, 7345]
+
     private var session: URLSession!
+    private var port = 9000
     private var pairingReqToken: Int?
     private var challengeType = 1
     private var codeCompleter: CheckedContinuation<Void, Error>?
@@ -27,30 +31,48 @@ final class VizioController: NSObject, TVController {
         self.pairingToken = token
         super.init()
         let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 8
+        config.timeoutIntervalForRequest = 6
+        config.waitsForConnectivity = false
         self.session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
     }
 
     func connect() async throws {
         onPhaseChange?(.connecting, "Connecting to the Vizio TV…")
+
+        // Find the port the TV answers on (works for both already-paired and new).
+        guard let workingPort = await resolvePort() else {
+            let msg = "Couldn't reach a Vizio SmartCast TV at \(ip) on port 9000 or 7345. "
+                + "Check that it's a SmartCast model, powered on, on the same Wi-Fi, and that "
+                + "mobile control isn't disabled (System → … → Mobile Devices)."
+            onPhaseChange?(.failed, msg)
+            throw TVError(msg)
+        }
+        port = workingPort
+
         if let token = pairingToken, !token.isEmpty {
             onPhaseChange?(.connected, "Connected.")
             return
         }
+
         // Start pairing — the TV displays a PIN.
-        let start = try await put("pairing/start",
-                                  body: ["DEVICE_ID": deviceId, "DEVICE_NAME": deviceName],
-                                  authed: false)
+        let start: [String: Any]
+        do {
+            start = try await rawPut("pairing/start",
+                                     body: ["DEVICE_ID": deviceId, "DEVICE_NAME": deviceName], authed: false)
+            try checkStatus(start)
+        } catch let error as TVError {
+            onPhaseChange?(.failed, "Vizio wouldn't start pairing: \(error.message)")
+            throw error
+        }
         guard let item = start["ITEM"] as? [String: Any],
-              let reqToken = item["PAIRING_REQ_TOKEN"] as? Int else {
-            onPhaseChange?(.failed, "Vizio didn't start pairing. Make sure SmartCast is enabled.")
-            throw TVError("Vizio didn't start pairing.")
+              let reqToken = intValue(item["PAIRING_REQ_TOKEN"]) else {
+            let msg = "Vizio started pairing but returned no token."
+            onPhaseChange?(.failed, msg); throw TVError(msg)
         }
         pairingReqToken = reqToken
-        challengeType = (item["CHALLENGE_TYPE"] as? Int) ?? 1
+        challengeType = intValue(item["CHALLENGE_TYPE"]) ?? 1
         onPhaseChange?(.awaitingCode, "Enter the code shown on your Vizio TV.")
 
-        // Suspend until the user submits the PIN (or times out).
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             codeCompleter = cont
             Task { @MainActor in
@@ -67,33 +89,64 @@ final class VizioController: NSObject, TVController {
 
     func submitPairingCode(_ code: String) async throws {
         guard let reqToken = pairingReqToken else { throw TVError("Pairing wasn't started.") }
+        let trimmed = code.trimmingCharacters(in: .whitespaces)
         do {
-            let result = try await put("pairing/pair",
-                                       body: ["DEVICE_ID": deviceId, "CHALLENGE_TYPE": challengeType,
-                                              "RESPONSE_VALUE": code, "PAIRING_REQ_TOKEN": reqToken],
-                                       authed: false)
+            let result = try await rawPut("pairing/pair",
+                                          body: ["DEVICE_ID": deviceId, "CHALLENGE_TYPE": challengeType,
+                                                 "RESPONSE_VALUE": trimmed, "PAIRING_REQ_TOKEN": reqToken],
+                                          authed: false)
+            try checkStatus(result)
             guard let item = result["ITEM"] as? [String: Any],
-                  let token = item["AUTH_TOKEN"] as? String else {
+                  let token = item["AUTH_TOKEN"] as? String, !token.isEmpty else {
                 throw TVError("The code was rejected. Try again.")
             }
             pairingToken = token
             if let cont = codeCompleter { codeCompleter = nil; cont.resume() }
         } catch {
-            onPhaseChange?(.awaitingCode, "That code didn't work — check the TV and try again.")
+            let message = (error as? TVError)?.message ?? error.localizedDescription
+            onPhaseChange?(.awaitingCode, "That code didn't work (\(message)). Check the TV and try again.")
             throw error
         }
     }
 
     func send(_ key: RemoteKey) async throws {
+        guard pairingToken != nil else { throw TVError("Not paired with the TV.") }
         guard let code = Self.keyCode(key) else { throw TVError("That button isn't available on Vizio.") }
-        _ = try await put("key_command/",
-                          body: ["KEYLIST": [["CODESET": code.set, "CODE": code.code, "ACTION": "KEYPRESS"]]],
-                          authed: true)
+        let result = try await rawPut("key_command/",
+                                      body: ["KEYLIST": [["CODESET": code.set, "CODE": code.code, "ACTION": "KEYPRESS"]]],
+                                      authed: true)
+        try checkStatus(result)
     }
 
-    func disconnect() async { /* stateless REST */ }
+    func disconnect() async {
+        if let cont = codeCompleter { codeCompleter = nil; cont.resume(throwing: TVError("Cancelled.")) }
+    }
 
     // MARK: - Helpers
+
+    /// Returns the first candidate port that answers, or nil if none do.
+    private func resolvePort() async -> Int? {
+        for candidate in Self.candidatePorts {
+            // A lightweight reachable check: the device-info-ish endpoint responds
+            // on a live SmartCast TV (even with an auth error, which still proves
+            // the port is open).
+            if await isReachable(port: candidate) { return candidate }
+        }
+        return nil
+    }
+
+    private func isReachable(port: Int) async -> Bool {
+        guard let url = URL(string: "https://\(ip):\(port)/state/device/deviceinfo") else { return false }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 4
+        do {
+            let (_, response) = try await session.data(for: request)
+            return response is HTTPURLResponse   // any HTTP reply means the port is open
+        } catch {
+            return false
+        }
+    }
 
     private static func keyCode(_ key: RemoteKey) -> (set: Int, code: Int)? {
         switch key {
@@ -113,8 +166,10 @@ final class VizioController: NSObject, TVController {
         }
     }
 
-    private func put(_ path: String, body: [String: Any], authed: Bool) async throws -> [String: Any] {
-        guard let url = URL(string: "https://\(ip):9000/\(path)") else { throw TVError("Invalid Vizio URL.") }
+    /// Sends a PUT and returns the parsed JSON. Transport failures throw the
+    /// underlying error; a non-JSON body throws a `TVError`.
+    private func rawPut(_ path: String, body: [String: Any], authed: Bool) async throws -> [String: Any] {
+        guard let url = URL(string: "https://\(ip):\(port)/\(path)") else { throw TVError("Invalid Vizio URL.") }
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -125,12 +180,23 @@ final class VizioController: NSObject, TVController {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw TVError("Unexpected response from the Vizio TV.")
         }
-        if let status = json["STATUS"] as? [String: Any],
-           let result = status["RESULT"] as? String,
-           result.uppercased() != "SUCCESS" {
-            throw TVError("Vizio: \((status["DETAIL"] as? String) ?? result)")
-        }
         return json
+    }
+
+    /// Throws a `TVError` describing the Vizio STATUS when it isn't SUCCESS.
+    private func checkStatus(_ json: [String: Any]) throws {
+        guard let status = json["STATUS"] as? [String: Any],
+              let result = (status["RESULT"] as? String)?.uppercased() else { return }
+        if result != "SUCCESS" {
+            throw TVError((status["DETAIL"] as? String) ?? result)
+        }
+    }
+
+    private func intValue(_ any: Any?) -> Int? {
+        if let i = any as? Int { return i }
+        if let n = any as? NSNumber { return n.intValue }
+        if let s = any as? String { return Int(s) }
+        return nil
     }
 }
 

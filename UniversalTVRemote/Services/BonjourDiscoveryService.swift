@@ -17,8 +17,9 @@ final class BonjourDiscoveryService {
         ServiceType(type: "_lg-smart-device._tcp", brand: .lg),
         ServiceType(type: "_samsungmsf._tcp", brand: .samsung),
         ServiceType(type: "_viziocast._tcp", brand: .vizio),
+        // Android TV's specific remote service. (Intentionally NOT _googlecast,
+        // which Vizio SmartCast and Chromecasts also advertise — too ambiguous.)
         ServiceType(type: "_androidtvremote2._tcp", brand: .androidTV),
-        ServiceType(type: "_googlecast._tcp", brand: .androidTV),
         ServiceType(type: "_airplay._tcp", brand: nil),
     ]
 
@@ -79,6 +80,8 @@ final class BonjourDiscoveryService {
         let lower = name.lowercased()
         if lower.contains("lg") || lower.contains("webos") { return .lg }
         if lower.contains("samsung") { return .samsung }
+        if lower.contains("vizio") { return .vizio }
+        if lower.contains("roku") { return .roku }
         return nil
     }
 

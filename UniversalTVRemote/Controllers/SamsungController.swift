@@ -39,21 +39,18 @@ final class SamsungController: NSObject, TVController {
         onPhaseChange?(.connecting, "Connecting to the Samsung TV…")
         macAddress = await fetchMac()
 
-        let nameB64 = Data(appName.utf8).base64EncodedString()
-        var urlString = "wss://\(ip):8002/api/v2/channels/samsung.remote.control?name=\(nameB64)"
-        if let token = pairingToken, !token.isEmpty { urlString += "&token=\(token)" }
-        guard let url = URL(string: urlString) else { throw TVError("Invalid Samsung URL.") }
-
-        let t = session.webSocketTask(with: url)
-        task = t
-
-        // Wait for the socket to open.
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            openContinuation = cont
-            t.resume()
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(8))
-                if let pending = openContinuation { openContinuation = nil; pending.resume(throwing: TVError("Connection timed out.")) }
+        // Newer Tizen TVs use the secure socket (wss :8002 with a token); older
+        // models use plaintext ws :8001. Try secure first, then fall back.
+        do {
+            try await openChannel(secure: true)
+        } catch {
+            do {
+                try await openChannel(secure: false)
+            } catch {
+                let msg = "Couldn't reach the Samsung TV at \(ip). Make sure it's on and on the same "
+                    + "Wi-Fi; on the TV, allow IP remotes under General → External Device Manager."
+                onPhaseChange?(.failed, msg)
+                throw TVError(msg)
             }
         }
         listen()
@@ -108,6 +105,32 @@ final class SamsungController: NSObject, TVController {
         task?.cancel(with: .goingAway, reason: nil); task = nil
         connectedInternal = false
         if let cont = connectCompleter { connectCompleter = nil; cont.resume(throwing: TVError("Disconnected.")) }
+    }
+
+    /// Opens the remote-control WebSocket (secure or plaintext) and waits for the
+    /// socket handshake. Throws on failure so `connect()` can fall back.
+    private func openChannel(secure: Bool) async throws {
+        let scheme = secure ? "wss" : "ws"
+        let port = secure ? 8002 : 8001
+        let nameB64 = Data(appName.utf8).base64EncodedString()
+        var urlString = "\(scheme)://\(ip):\(port)/api/v2/channels/samsung.remote.control?name=\(nameB64)"
+        if let token = pairingToken, !token.isEmpty { urlString += "&token=\(token)" }
+        guard let url = URL(string: urlString) else { throw TVError("Invalid Samsung URL.") }
+
+        let t = session.webSocketTask(with: url)
+        task = t
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+            openContinuation = cont
+            t.resume()
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(6))
+                if let pending = openContinuation {
+                    openContinuation = nil
+                    t.cancel(with: .goingAway, reason: nil)
+                    pending.resume(throwing: TVError("Connection timed out."))
+                }
+            }
+        }
     }
 
     // MARK: - Receive
