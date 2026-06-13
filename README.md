@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/app-icon.png" alt="App icon" width="120">
+</p>
+
 # Universal TV Remote (iOS / SwiftUI)
 
 A native **SwiftUI** iOS app that discovers **LG webOS TVs** on your local Wi-Fi
