@@ -38,19 +38,18 @@ discovery/classification is broken.
    devices. Net result: nothing gets classified → nothing listed.
 
 **Recommended fixes (in order):**
-- **(A) Replace `NWConnection` probing with `URLSession` HTTP/HTTPS probes.** We
-  already make successful on-device HTTP calls (Roku ECP, Vizio HTTPS, Samsung
-  `/api/v2/`), so URLSession reachability is proven to work where `NWConnection`
-  doesn't. Probe per brand and classify by which responds:
-  - Roku: `GET http://ip:8060/query/device-info` (200 → Roku; also yields name/MAC)
-  - Samsung: `GET http://ip:8001/api/v2/` (JSON `device` → Samsung; yields name)
+- **(A) Replace `NWConnection` probing with `URLSession` HTTP/HTTPS probes.**
+  ✅ **DONE (commit pending).** `Services/BrandProbe.swift` now probes per brand
+  via URLSession (`detect(ip:)` signature unchanged, so `ScanViewModel` is
+  untouched) and classifies by which responds:
+  - Roku: `GET http://ip:8060/query/device-info` (200 + device-info XML → Roku)
+  - Samsung: `GET http://ip:8001/api/v2/` (200 + JSON `device` → Samsung)
   - Vizio: `GET https://ip:9000/state/device/deviceinfo` then `:7345` (any HTTP
-    reply → Vizio; self-signed, accept trust)
-  - LG: `GET http://ip:3000/` (the SSAP socket's HTTP upgrade typically returns
-    an HTTP error response rather than refusing → port open → LG) — verify; if
-    not, fetch the SSDP description XML / treat presence in paired store as LG.
-  Run these in parallel with a short timeout. This is the single most promising
-  fix and should make both TVs appear and classify correctly.
+    reply → Vizio; self-signed cert accepted via a trust-all delegate)
+  - LG: `GET http://ip:3000/` (any HTTP reply → port open → LG); weakest signal,
+    checked last, with `TVBrand.infer(fromName:)` still the primary LG hint.
+  Probes run in parallel with a ~2s timeout. **Awaiting on-device confirmation**
+  that the LG + Vizio now appear/classify in "Discovered".
 - **(B) Add the Multicast Networking entitlement** so SSDP works on device too
   (request at https://developer.apple.com/contact/request/networking-multicast,
   then add `com.apple.developer.networking.multicast` to a `.entitlements` file

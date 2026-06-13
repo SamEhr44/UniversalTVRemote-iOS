@@ -39,8 +39,9 @@ vendor cloud. Network-only (no IR; iPhones lack an IR blaster).
 ### Discovery
 - ✅ SSDP/UPnP M-SEARCH (POSIX UDP) with brand classification.
 - ✅ Bonjour/mDNS via `NWBrowser` (works on device without the multicast entitlement).
-- ⚠️ `BrandProbe` (TCP port probe) for authoritative classification — **flaky on
-  physical devices** (see `docs/KNOWN_ISSUES.md`).
+- 🔄 `BrandProbe` reworked to **URLSession HTTP/HTTPS** reachability probes
+  (replacing the flaky `NWConnection` TCP probe) for authoritative on-device
+  classification — awaiting hardware confirmation (see `docs/KNOWN_ISSUES.md` #1).
 
 ## What still needs development
 
