@@ -24,6 +24,9 @@ final class ScanViewModel: ObservableObject {
     private let wol = WakeOnLanService()
     private var scanTask: Task<Void, Never>?
 
+    private var probed = Set<String>()           // IPs already brand-probed
+    private var bestNames: [String: String] = [:] // best display name seen per IP
+
     func loadPaired() async { paired = await store.getAllPairedTVs() }
 
     func startScan() {
@@ -31,28 +34,60 @@ final class ScanViewModel: ObservableObject {
         isScanning = true
         errorMessage = nil
         discovered.removeAll()
+        probed.removeAll()
+        bestNames.removeAll()
 
         let ssdpStream = ssdp.discover()
         let bonjourStream = bonjour.discover()
         scanTask = Task { [weak self] in
             guard let self else { return }
             await withTaskGroup(of: Void.self) { group in
-                group.addTask { for await d in ssdpStream { await self.add(d) } }
-                group.addTask { for await d in bonjourStream { await self.add(d) } }
+                group.addTask { for await d in ssdpStream { await self.consider(d) } }
+                group.addTask { for await d in bonjourStream { await self.consider(d) } }
             }
             isScanning = false
         }
     }
 
-    /// Adds/updates a discovered device, deduped by IP. Keeps a known brand if a
-    /// later hit for the same IP is unclassified.
-    private func add(_ device: TVDevice) {
-        if let idx = discovered.firstIndex(where: { $0.ip == device.ip }) {
-            let keepBrand = device.resolvedBrand == .unknown ? discovered[idx].brand : device.brand
-            discovered[idx] = device.copyWith(brand: keepBrand)
-        } else {
-            discovered.append(device)
+    /// Records the best name for a candidate and, once per IP, probes its ports
+    /// to classify the brand authoritatively (mDNS/SSDP types are unreliable).
+    private func consider(_ candidate: TVDevice) {
+        let best = Self.preferName(bestNames[candidate.ip], candidate.name)
+        bestNames[candidate.ip] = best
+        if let idx = discovered.firstIndex(where: { $0.ip == candidate.ip }) {
+            discovered[idx] = discovered[idx].copyWith(name: best)
         }
+
+        guard !probed.contains(candidate.ip) else { return }
+        probed.insert(candidate.ip)
+        let ip = candidate.ip
+        Task { [weak self] in
+            guard let brand = await BrandProbe.detect(ip: ip) else { return }
+            guard let self else { return }
+            let name = self.bestNames[ip] ?? Self.fallbackName(brand: brand, ip: ip)
+            let device = TVDevice(ip: ip, name: name, brand: brand)
+            if let idx = self.discovered.firstIndex(where: { $0.ip == ip }) {
+                self.discovered[idx] = device
+            } else {
+                self.discovered.append(device)
+            }
+        }
+    }
+
+    /// Prefers human/room names over model-id strings and generic "Brand (ip)".
+    private static func preferName(_ current: String?, _ new: String) -> String {
+        guard let current else { return new }
+        return score(new) > score(current) ? new : current
+    }
+
+    private static func score(_ name: String) -> Int {
+        if name.contains("(") && name.contains(")") { return 0 }   // generic "Brand (ip)"
+        if name.contains(" ") || name.hasPrefix("[") { return 2 }  // "Living Room", "[LG] …"
+        return 1                                                    // model-id / hash
+    }
+
+    private static func fallbackName(brand: TVBrand, ip: String) -> String {
+        "\(brand.displayName) (\(ip))"
     }
 
     /// Connects to a manually-entered IP with an explicitly chosen brand.
@@ -152,12 +187,13 @@ struct ScanView: View {
                         }
 
                         SectionHeader("Discovered")
-                        if model.discovered.isEmpty {
+                        let pairedIps = Set(model.paired.map(\.ip))
+                        let fresh = model.discovered.filter { !pairedIps.contains($0.ip) }
+                        if fresh.isEmpty {
                             EmptyStateView(isScanning: model.isScanning)
                         } else {
-                            let pairedIps = Set(model.paired.map(\.ip))
-                            ForEach(model.discovered) { device in
-                                DeviceCard(device: device, isPaired: pairedIps.contains(device.ip),
+                            ForEach(fresh) { device in
+                                DeviceCard(device: device, isPaired: false,
                                            onTap: { Task { await model.open(device) } }, onWake: nil)
                             }
                         }
@@ -262,11 +298,7 @@ private struct DeviceCard: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: device.resolvedBrand.symbol)
-                .font(.title3).foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .background(AppTheme.accent.opacity(0.25), in: Circle())
-                .overlay(Circle().stroke(AppTheme.edgeHighlight, lineWidth: 1))
+            BrandBadge(brand: device.resolvedBrand)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(device.name).font(.body.weight(.semibold)).foregroundStyle(.white)
@@ -302,6 +334,42 @@ private struct DeviceCard: View {
         .glassCard(corner: 18)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
+    }
+}
+
+/// Logo-style brand badge: a brand-colored circle with the brand wordmark.
+private struct BrandBadge: View {
+    let brand: TVBrand
+    var body: some View {
+        ZStack {
+            Circle().fill(brand.badgeColor)
+            if brand == .unknown {
+                Image(systemName: "tv").font(.title3).foregroundStyle(.white)
+            } else {
+                Text(brand.shortMark)
+                    .font(.system(size: 14, weight: .black, design: .rounded))
+                    .minimumScaleFactor(0.4)
+                    .lineLimit(1)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 5)
+            }
+        }
+        .frame(width: 44, height: 44)
+        .overlay(Circle().stroke(AppTheme.edgeHighlight, lineWidth: 1))
+    }
+}
+
+extension TVBrand {
+    /// Approximate brand color for the device badge.
+    var badgeColor: Color {
+        switch self {
+        case .lg: return Color(red: 0.64, green: 0.0, blue: 0.20)
+        case .roku: return Color(red: 0.40, green: 0.16, blue: 0.60)
+        case .samsung: return Color(red: 0.08, green: 0.16, blue: 0.63)
+        case .vizio: return Color(red: 0.10, green: 0.10, blue: 0.12)
+        case .androidTV: return Color(red: 0.13, green: 0.52, blue: 0.32)
+        case .unknown: return AppTheme.accent.opacity(0.4)
+        }
     }
 }
 

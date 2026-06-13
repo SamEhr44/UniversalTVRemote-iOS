@@ -71,6 +71,18 @@ final class TVRemoteSession: ObservableObject {
     /// Connects to (and pairs with) a device. Drives `phase` throughout.
     func connect(to device: TVDevice) async {
         await controller?.disconnect()
+
+        // Resolve the brand if unknown (e.g. devices paired before multi-brand
+        // support, or manual entries) by probing the TV's control ports.
+        var device = device
+        if device.resolvedBrand == .unknown {
+            phase = .connecting
+            statusMessage = "Identifying TV…"
+            if let detected = await BrandProbe.detect(ip: device.ip) {
+                device = device.copyWith(brand: detected)
+            }
+        }
+
         let controller = TVControllerFactory.make(for: device)
         self.controller = controller
         self.device = device

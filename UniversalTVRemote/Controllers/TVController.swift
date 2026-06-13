@@ -28,6 +28,18 @@ enum TVBrand: String, Codable, CaseIterable {
         case .androidTV: return "tv.badge.wifi"
         }
     }
+
+    /// Short wordmark shown in the device badge (logo-style).
+    var shortMark: String {
+        switch self {
+        case .lg: return "LG"
+        case .roku: return "roku"
+        case .samsung: return "SAMSUNG"
+        case .vizio: return "VIZIO"
+        case .androidTV: return "TV"
+        case .unknown: return ""
+        }
+    }
 }
 
 /// The universal set of remote commands. Not every TV supports every key —

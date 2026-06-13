@@ -36,8 +36,9 @@ final class BonjourDiscoveryService {
                 browser.browseResultsChangedHandler = { results, _ in
                     for result in results {
                         guard case let .service(name, _, _, _) = result.endpoint else { continue }
-                        let brand = service.brand ?? Self.inferBrand(name)
-                        guard let brand else { continue }   // unknown AirPlay device we can't control
+                        // brand here is only a hint; the scan re-probes each IP's
+                        // ports to classify authoritatively.
+                        let brand = service.brand ?? Self.inferBrand(name) ?? .unknown
                         guard seen.insert(name) else { continue }
                         self.resolve(endpoint: result.endpoint, name: name, brand: brand,
                                      queue: queue, continuation: continuation)
