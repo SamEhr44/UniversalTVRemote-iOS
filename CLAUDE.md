@@ -60,12 +60,15 @@ xcrun simctl io "iPhone 17" screenshot /tmp/shot.png   # then Read the PNG
 ```
 
 ### ⚠️ Two clones exist on this machine
-- `~/Desktop/CodingProject/UniversalTVRemote-iOS` — where commits are made.
-- `~/UniversalTVRemote-iOS` — **the clone the user opens in Xcode / builds to their phone.**
+- `~/UniversalTVRemote-iOS` — **the working clone: commits are made here AND the
+  user opens this one in Xcode / builds to their phone.** This is `cwd` for
+  sessions. Because edits and commits happen in the same clone the user builds,
+  **no cross-clone `git pull` is needed** — changes are on disk immediately.
+- `~/Desktop/CodingProject/UniversalTVRemote-iOS` — a **stale legacy clone**
+  (far behind `origin`). Don't commit here. If it's ever used, `git pull` first.
 
-The user must `git pull` in `~/UniversalTVRemote-iOS` to get new commits. A bare
-`find … UniversalTVRemote.app | head -1` can grab the wrong DerivedData; always
-build with `-derivedDataPath`.
+A bare `find … UniversalTVRemote.app | head -1` can grab the wrong DerivedData
+(e.g. from the stale clone); always build with an explicit `-derivedDataPath`.
 
 ### Xcode project format
 `project.pbxproj` is hand-written and uses **file-system synchronized groups**

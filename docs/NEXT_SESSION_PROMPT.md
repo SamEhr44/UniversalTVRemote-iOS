@@ -33,8 +33,10 @@ ENVIRONMENT (critical):
     -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/uvtr_dd build
 - The Xcode project uses file-system synchronized groups: to add a Swift file,
   just create it under UniversalTVRemote/ — do NOT edit project.pbxproj.
-- TWO clones exist: commits happen in ~/Desktop/CodingProject/UniversalTVRemote-iOS;
-  the user builds ~/UniversalTVRemote-iOS in Xcode and must `git pull` there.
+- Work in ~/UniversalTVRemote-iOS (the session cwd): commits AND the user's Xcode
+  builds both happen in this one clone, so no cross-clone `git pull` is needed —
+  edits are on disk immediately. (~/Desktop/CodingProject/UniversalTVRemote-iOS is
+  a stale legacy clone; don't commit there.)
 - You CANNOT test against real TVs from here. The user tests on their iPhone
   against an LG webOS TV at 192.168.1.131 and a Vizio V505-H9 at 192.168.1.212.
   After each change, tell the user exactly what to pull/run and what to report
