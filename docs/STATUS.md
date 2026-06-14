@@ -1,12 +1,47 @@
 # Project Status & Roadmap
 
-_Last updated: 2026-06-13 (commit `ccea736`)._
+_Last updated: 2026-06-13 (commit `fd8d2b5`)._
 
 ## Goal
 
 A **universal TV remote** for iOS: discover smart TVs on the local network across
 brands, pair, and control them from a polished SwiftUI remote — no backend, no
 vendor cloud. Network-only (no IR; iPhones lack an IR blaster).
+
+## Current phase: shipping v1.0 to the App Store (iPhone-only)
+
+The app is functional enough to release and is **mid App Store submission**. This
+is the active near-term goal; the discovery/brand work below is the post-launch
+roadmap.
+
+- **Device family:** **iPhone-only** (`TARGETED_DEVICE_FAMILY = 1`). Mac Catalyst
+  and "Designed for iPhone" on Mac/Apple Vision are explicitly **off**
+  (`SUPPORTS_MACCATALYST`, `SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD`,
+  `SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD` = NO). This removed the 13" iPad / Mac /
+  Vision screenshot requirements that were blocking submission.
+- **Version / build:** marketing **1.0**, build **2** (`CURRENT_PROJECT_VERSION`).
+  Build 1 was a Universal build already uploaded, then superseded — the
+  iPhone-only build must upload as build ≥ 2 to avoid a duplicate-build rejection.
+- **Signing:** `DEVELOPMENT_TEAM = R96R95D3DM` is committed in `project.pbxproj`
+  (paid Apple Developer account). Bundle id `com.samehr.UniversalTVRemote`.
+- **Screenshots:** App-Store-valid iPhone sizes live in
+  `docs/appstore/screenshots/` — `*-iphone6.9-1290x2796.png` (preferred slot) and
+  `*-iphone6.5-1284x2778.png`, for the Remote and device-list screens. One iPhone
+  size satisfies the requirement (Apple scales it down).
+- **Listing copy / metadata:** `docs/appstore/LISTING.md` (name, subtitle,
+  description, keywords, category, age rating, the trademark/disclaimer note, and
+  the screenshot slot mapping).
+
+**Remaining to actually ship (done by the user in Xcode / App Store Connect):**
+1. Re-**Archive** the iPhone-only build (*Any iOS Device*) and **upload** it —
+   the previously uploaded Universal build is stale. (Free disk first; the Mac was
+   ~98% full and an Archive needs scratch space.)
+2. In App Store Connect: version page = **1.0**, attach build **2**, upload the
+   iPhone screenshots, finish **Privacy Policy URL** + **Support URL** + **App
+   Privacy** (= Data Not Collected), Age Rating (4+), then **Submit for Review**.
+3. _Optional pre-empt:_ swap the Netflix/YouTube/Apple TV wordmark buttons in
+   `RemoteView.swift` for neutral labels if review flags the streaming wordmarks
+   (the "Not affiliated…" disclaimer in the description already covers brand names).
 
 ## What's been developed
 
@@ -45,10 +80,14 @@ vendor cloud. Network-only (no IR; iPhones lack an IR blaster).
   the entitlement-free discovery path. Awaiting hardware confirmation that it
   lists the LG + Vizio (see `docs/KNOWN_ISSUES.md` #1).
 
-## What still needs development
+## What still needs development (post-launch roadmap)
 
-1. **Reliable on-device discovery + brand classification.** _(Top priority — see
-   Known Issues #1.)_ Currently nothing appears in "Discovered" on the physical
+_These are the engineering goals after the v1.0 release ships. v1.0 is usable
+today: the LG and Vizio work on the user's hardware via "Previously paired" /
+Add-by-IP, which is enough to launch._
+
+1. **Reliable on-device discovery + brand classification.** _(Top engineering
+   priority — see Known Issues #1.)_ Currently nothing appears in "Discovered" on the physical
    phone. The likely fix is to replace the `NWConnection` port probe with
    **`URLSession` HTTP/HTTPS reachability probes** (proven to work on device) and
    to read the AirPlay/SSDP description for brand/name.

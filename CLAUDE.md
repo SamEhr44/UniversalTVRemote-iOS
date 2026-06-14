@@ -4,6 +4,13 @@ This file is the entry point for any AI/coding session on **UniversalTVRemote-iO
 Read this first, then `docs/STATUS.md`, `docs/ARCHITECTURE.md`, and
 `docs/KNOWN_ISSUES.md`. Keep all four up to date as the project evolves.
 
+> **Current phase (2026-06-13):** shipping **v1.0** to the App Store as an
+> **iPhone-only** app (marketing **1.0**, build **2**, signing team `R96R95D3DM`).
+> The remaining work is App Store Connect submission, not code — see the
+> "Current phase" section of `docs/STATUS.md` and the assets in `docs/appstore/`
+> (`LISTING.md` + `screenshots/`). The discovery/brand controllers below are the
+> **post-launch** roadmap.
+
 ---
 
 ## What this project is
@@ -15,7 +22,7 @@ have no IR blaster, so this targets smart TVs, not legacy IR-only sets.
 
 - Repo: https://github.com/SamEhr44/UniversalTVRemote-iOS (public)
 - Bundle id: `com.samehr.UniversalTVRemote`
-- Min iOS: 17.0 · Built with Xcode 26
+- Min iOS: 17.0 · Built with Xcode 26 · **iPhone-only** (`TARGETED_DEVICE_FAMILY = 1`)
 - Origin: started as a Swift port of the Flutter app
   https://github.com/SamEhr44/TVRemoteProject (LG webOS only), then generalized.
 

@@ -8,6 +8,18 @@ You are continuing work on UniversalTVRemote-iOS, a native SwiftUI iOS universal
 TV remote (discovers smart TVs on the LAN, pairs, and controls them across
 brands). Your job is to drive it toward a fully working app.
 
+RELEASE STATUS (read first — this may be the actual current task):
+The app is mid App Store submission as an IPHONE-ONLY v1.0 (marketing 1.0, build 2,
+signing team R96R95D3DM, bundle com.samehr.UniversalTVRemote). Mac Catalyst and
+Designed-for-Mac/Vision are turned off. App-Store-valid iPhone screenshots are in
+docs/appstore/screenshots/ and listing copy is in docs/appstore/LISTING.md. What
+remains to ship is done by the user in Xcode/App Store Connect (re-Archive the
+iPhone-only build, upload as build 2, attach to the 1.0 version page, add
+screenshots + Privacy/Support URLs + App Privacy, Submit for Review). See
+docs/STATUS.md "Current phase" for the exact checklist. If the user's request is
+about getting the app submitted/approved, work THAT — the priorities below are the
+post-launch engineering roadmap.
+
 START HERE (read before writing any code):
 1. CLAUDE.md (repo root) — build/run, environment gotchas, code map.
 2. docs/STATUS.md — goal, what's done, what's left.
